@@ -215,8 +215,9 @@ const SPCOL={"Gift Card":'#0b3a8f',"Robux":'#2e86e6',"Razer Gold":'#1e5fd0',"Nic
 const RED='#f43f5e',GREEN='#34d399';
 Chart.defaults.font.family='Arial';Chart.defaults.font.size=11;Chart.defaults.color='#5b6b7b';
 let charts=[],curr="TQ";
-const DATA_MAX={y:2026,mo:5,d:30};
-let FROM={y:2026,mo:5,d:1},TO={y:2026,mo:5,d:30};
+function today(){const t=new Date();return{y:t.getFullYear(),mo:t.getMonth(),d:t.getDate()};}
+const TD=today();
+let FROM={y:TD.y,mo:TD.mo,d:1},TO={y:TD.y,mo:TD.mo,d:TD.d};
 
 /* ===== tiện ích ===== */
 const fmt=n=>{if(!n)return"-";const a=Math.abs(n);if(a>=1e9)return(n/1e9).toFixed(2)+" tỷ";if(a>=1e6)return(n/1e6).toFixed(1)+" tr";return Math.round(n).toLocaleString('vi-VN');};
@@ -402,10 +403,10 @@ function setRange(from,to){if(from)FROM=clampD(parseISO(from));if(to)TO=clampD(p
  const a=new Date(FROM.y,FROM.mo,FROM.d),b=new Date(TO.y,TO.mo,TO.d);if(a>b){const t=FROM;FROM=TO;TO=t;}
  const ff=document.getElementById('fFrom'),ft=document.getElementById('fTo');if(ff)ff.value=iso(FROM);if(ft)ft.value=iso(TO);
  applyFilter();}
-function preset(k){const mx=new Date(DATA_MAX.y,DATA_MAX.mo,DATA_MAX.d);
- if(k==='y'){FROM={y:2026,mo:0,d:1};TO={y:DATA_MAX.y,mo:DATA_MAX.mo,d:DATA_MAX.d};}
- else if(k==='m'){FROM={y:DATA_MAX.y,mo:DATA_MAX.mo,d:1};TO={y:DATA_MAX.y,mo:DATA_MAX.mo,d:DATA_MAX.d};}
- else{const f=new Date(mx);f.setDate(f.getDate()-(k-1));FROM={y:f.getFullYear(),mo:f.getMonth(),d:f.getDate()};TO={y:DATA_MAX.y,mo:DATA_MAX.mo,d:DATA_MAX.d};}
+function preset(k){const t=today();const mx=new Date(t.y,t.mo,t.d);
+ if(k==='y'){FROM={y:t.y,mo:0,d:1};TO=t;}
+ else if(k==='m'){FROM={y:t.y,mo:t.mo,d:1};TO=t;}
+ else{const f=new Date(mx);f.setDate(f.getDate()-(k-1));FROM={y:f.getFullYear(),mo:f.getMonth(),d:f.getDate()};TO=t;}
  const ff=document.getElementById('fFrom'),ft=document.getElementById('fTo');if(ff)ff.value=iso(FROM);if(ft)ft.value=iso(TO);
  applyFilter();}
 function rangeDays(){const out=[];const a=new Date(FROM.y,FROM.mo,FROM.d),b=new Date(TO.y,TO.mo,TO.d);for(let t=new Date(a);t<=b;t.setDate(t.getDate()+1))out.push({y:t.getFullYear(),mo:t.getMonth(),d:t.getDate()});return out;}
