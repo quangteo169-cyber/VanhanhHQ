@@ -85,6 +85,14 @@ select:focus{outline:none;border-color:var(--cyan);box-shadow:0 0 10px rgba(34,2
 .loginbtn{width:100%;padding:11px;border:none;border-radius:9px;background:linear-gradient(90deg,#22d3ee,#1e5fd0);color:#06101f;font-weight:bold;font-size:14px;cursor:pointer;box-shadow:0 6px 18px rgba(34,211,238,.35)}
 .loginbtn:hover{filter:brightness(1.08)}
 .loginerr{color:#fb7185;font-size:12px;margin-top:10px;min-height:16px}
+.filters input[type=date]{background:rgba(10,25,50,.9);color:#e7effb;border:1px solid rgba(120,180,255,.35);border-radius:9px;padding:6px 10px;font-size:13px;font-weight:bold}
+.filters input[type=date]::-webkit-calendar-picker-indicator{filter:invert(1);cursor:pointer}
+.presets{display:flex;gap:5px}
+.pbtn{background:rgba(30,95,208,.28);color:#cfe0f0;border:1px solid rgba(120,180,255,.3);border-radius:8px;padding:6px 9px;font-size:11px;font-weight:bold;cursor:pointer}
+.pbtn:hover{background:rgba(30,95,208,.55)}
+.center{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:50px;color:#9fb4d3;gap:12px}
+.spin{width:26px;height:26px;border:3px solid rgba(120,180,255,.25);border-top-color:#22d3ee;border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
 </style>
 </head>
 <body>
@@ -108,7 +116,6 @@ select:focus{outline:none;border-color:var(--cyan);box-shadow:0 0 10px rgba(34,2
     <div class="nav" data-id="SRC" onclick="go('SRC')"><span class="code">·</span><span class="dot" style="color:#34d399;background:#34d399"></span><span>Nguồn &amp; Cấu hình</span></div>
   </div>
   <div class="main">
-    <div class="demo">🟢 REALTIME cấp Tháng/Năm — đọc live từ Google Sheet mỗi 60s (Data theo SPDV & NCC). Cấp Ngày là phân bổ từ số tháng; nối L2 để ra ngày thật. Không nối tab raw nhạy cảm.</div>
     <div class="top">
       <div><h1 id="rtitle">—</h1><div class="meta" id="rmeta">—</div></div>
       <div>
@@ -152,7 +159,9 @@ const RAZER={bot:234,tay:9};
 
 /* ============ REALTIME: đọc 2 tab TỔNG HỢP an toàn (không nối raw nhạy cảm) ============ */
 const BASE="https://docs.google.com/spreadsheets/d/e/2PACX-1vSve6XRHg5gWRzqkazHm5zvlrkTkAMLa7TJms_U-ebAFcrDAmcvCYfNJ50hrvV988tXyKC7q70LQgPc/pub";
-const CSV={ spdv:BASE+"?gid=460836856&single=true&output=csv", ncc:BASE+"?gid=1758921427&single=true&output=csv" };
+const CSV={ spdv:BASE+"?gid=460836856&single=true&output=csv", ncc:BASE+"?gid=1758921427&single=true&output=csv", fx:BASE+"?gid=163849763&single=true&output=csv" };
+let NCC_ALL={};
+let FXMAP={},FXKEYS=[];
 let LIVE=false;
 function num(x){if(x==null)return 0;x=(''+x).replace(/["\s₫đ$%]/g,'');if(x===''||x==='-')return 0;
  if(x.indexOf(',')>-1&&x.indexOf('.')===-1){x=x.replace(/\./g,'').replace(',','.');}
@@ -190,13 +199,12 @@ function applyLive(a,b){let ok=false;
      const v=P.val(P.nhap,sp,mn);if(v)hit=true;NHAP[sp][i]=v;
      const xl=sp==="Token"?"Item (Token)":sp;XUAT[sp]=XUAT[sp]||[0,0,0,0,0,0];XUAT[sp][i]=P.val(P.xuat,sp,mn)||P.val(P.xuat,xl,mn);
      if(DIE[sp])DIE[sp][i]=P.thiethai(sp,mn);}});
-   for(let i=0;i<6;i++)DON.Robux[i]=P.don("Tháng 0"+(i+1));
-   ok=hit;}
- if(b&&b.length){const N=parseNCC(b);if(N.data["Robux"]){const arr=N.data["Robux"].map(row=>{let t=0;for(let i=0;i<6;i++){const c=N.col["Tháng 0"+(i+1)];if(c!=null)t+=num(row[c]);}return[(''+(row[3]||'')).trim(),t];}).filter(x=>x[0]&&x[1]>0).sort((a,b)=>b[1]-a[1]).slice(0,10);if(arr.length)NCC_ROBUX=arr;}}
+   for(let i=0;i<6;i++)DON.Robux[i]=P.don("Tháng 0"+(i+1));ok=hit;}
+ if(b&&b.length){const N=parseNCC(b);const all={};Object.keys(N.data).forEach(sp=>{const arr=N.data[sp].map(row=>{let t=0;for(let i=0;i<6;i++){const c=N.col["Tháng 0"+(i+1)];if(c!=null)t+=num(row[c]);}return[(''+(row[3]||'')).trim(),t];}).filter(x=>x[0]&&x[1]>0).sort((x,y)=>y[1]-x[1]);if(arr.length)all[sp]=arr;});if(Object.keys(all).length){NCC_ALL=all;if(all["Robux"])NCC_ROBUX=all["Robux"].slice(0,10);}}
  return ok;}
 async function loadLive(){
- const [a,b]=await Promise.all([fetchCSV(CSV.spdv),fetchCSV(CSV.ncc)]);
- LIVE=applyLive(a,b);
+ const [a,b,fx]=await Promise.all([fetchCSV(CSV.spdv),fetchCSV(CSV.ncc),fetchCSV(CSV.fx)]);
+ LIVE=applyLive(a,b);if(fx&&fx.length)parseFX(fx);
  const e=document.getElementById('upd');if(e)e.textContent="Cập nhật "+new Date().toLocaleTimeString('vi-VN')+(LIVE?" · LIVE":" · số dự phòng");
  if(curr!=="SRC")render();}
 
@@ -207,7 +215,8 @@ const SPCOL={"Gift Card":'#0b3a8f',"Robux":'#2e86e6',"Razer Gold":'#1e5fd0',"Nic
 const RED='#f43f5e',GREEN='#34d399';
 Chart.defaults.font.family='Arial';Chart.defaults.font.size=11;Chart.defaults.color='#5b6b7b';
 let charts=[],curr="TQ";
-window._m=(window._m??5);window._d=(window._d??0);
+const DATA_MAX={y:2026,mo:5,d:30};
+let FROM={y:2026,mo:5,d:1},TO={y:2026,mo:5,d:30};
 
 /* ===== tiện ích ===== */
 const fmt=n=>{if(!n)return"-";const a=Math.abs(n);if(a>=1e9)return(n/1e9).toFixed(2)+" tỷ";if(a>=1e6)return(n/1e6).toFixed(1)+" tr";return Math.round(n).toLocaleString('vi-VN');};
@@ -223,92 +232,83 @@ function rng(seed){let s=seed>>>0;return()=>{s=(s*1664525+1013904223)>>>0;return
 function dayArr(total,m,seed){const n=DAYS_IN[m],r=rng((seed>>>0)+m*97);let w=[],sum=0;for(let d=0;d<n;d++){const dow=new Date(2026,m,d+1).getDay();const b=dow===0?0.55:(dow===6?0.8:1);const x=b*(0.6+0.8*r());w.push(x);sum+=x;}return w.map(x=>Math.round(total*x/sum));}
 
 /* ===== SCOPE ===== */
-function scopeLabel(){const m=window._m,d=window._d;return m<0?"Cả năm 2026":(d>0?`Ngày ${d}/${m+1}/2026`:`Tháng ${m+1}/2026`);}
+function scopeLabel(){return pad2(FROM.d)+'/'+pad2(FROM.mo+1)+'/'+FROM.y+' \u2192 '+pad2(TO.d)+'/'+pad2(TO.mo+1)+'/'+TO.y;}
 function yearN(){return SPDV.reduce((a,s)=>a+NHAP[s].reduce((x,y)=>x+y,0),0);}
 function monthNhap(m){return SPDV.reduce((a,s)=>a+NHAP[s][m],0);}
-function factor(){const m=window._m,d=window._d;if(m<0)return 1;const sh=monthNhap(m)/(yearN()||1);return d>0?sh/DAYS_IN[m]:sh;} // prorate cho báo cáo tổng
+function factor(){const mm=monthsInRange();let f=0;for(const m in mm){const mi=+m;f+=(monthNhap(mi)/(yearN()||1))*mm[m]/DAYS_IN[mi];}return f;} // prorate cho báo cáo tổng
 /* giá trị theo scope từ mảng tháng (SPDV metric) */
-function sval(arr,seed){const m=window._m,d=window._d;if(!arr)return 0;if(m<0)return arr.reduce((a,b)=>a+b,0);if(d>0)return dayArr(arr[m]||0,m,seed)[d-1]||0;return arr[m]||0;}
+function sval(arr,seed){return aggArr(arr,null,null,seed);}
 function scopeData(){const o={nhap:{},xuat:{},die:{},don:0,totalNhap:0,totalXuat:0,totalDie:0};
- const m=window._m,d=window._d;const key=(m>=0&&d>0)?dkey(m,d):null;
- SPDV.forEach(sp=>{
-   let nh=(key&&DAILY.nhap[sp])?(DAILY.nhap[sp][key]||0):sval(NHAP[sp],sp.length*31);
-   let xu=(key&&DAILY.xuat[sp])?(DAILY.xuat[sp][key]||0):sval(XUAT[sp],sp.length*17);
-   let di=(key&&DAILY.die[sp])?(DAILY.die[sp][key]||0):sval(DIE[sp],sp.length*7);
-   o.nhap[sp]=nh;o.xuat[sp]=xu;o.die[sp]=di;o.totalNhap+=nh;o.totalXuat+=xu;o.totalDie+=di;});
- o.don=(key&&DAILY._donLoaded)?(DAILY.don[key]||0):sval(DON.Robux,999);return o;}
+ SPDV.forEach(sp=>{const nh=aggArr(NHAP[sp],sp,DAILY.nhap,sp.length*31),xu=aggArr(XUAT[sp],sp,DAILY.xuat,sp.length*17),di=aggArr(DIE[sp],sp,DAILY.die,sp.length*7);o.nhap[sp]=nh;o.xuat[sp]=xu;o.die[sp]=di;o.totalNhap+=nh;o.totalXuat+=xu;o.totalDie+=di;});
+ o.don=DAILY._donLoaded?aggArr(null,'Robux',{'Robux':DAILY.don},999):aggArr(DON.Robux,null,null,999);return o;}
 /* xu hướng theo scope: cả năm→tháng; else→ngày trong tháng */
-function trend(totalArrByMonthFn,seedBase){const m=window._m,d=window._d;
- if(m<0){return{labels:MN,values:MN.map((_,i)=>totalArrByMonthFn(i)),hl:-1};}
- const n=DAYS_IN[m];const perDay=dayArr(totalArrByMonthFn(m),m,seedBase);
- return{labels:Array.from({length:n},(_,i)=>i+1),values:perDay,hl:d>0?d-1:-1};}
+function trend(totalFn,seed){const days=rangeDays().filter(x=>x.y===2026);
+ if(days.length<=31){const labels=days.map(x=>x.d+'/'+(x.mo+1));const values=days.map(x=>x.mo>5?0:(dayArr(totalFn(x.mo),x.mo,seed)[x.d-1]||0));return{labels,values,hl:-1};}
+ const mm=monthsInRange();const labels=[],values=[];Object.keys(mm).map(Number).sort((a,b)=>a-b).forEach(mi=>{labels.push('T'+(mi+1));values.push(Math.round(totalFn(mi)*mm[mi]/DAYS_IN[mi]));});return{labels,values,hl:-1};}
 /* so sánh kỳ trước */
-function prevScope(fn){const m=window._m,d=window._d;const cm=window._m,cd=window._d;let r;
- if(m<0){r=null;} else if(d>1){window._d=d-1;r=fn();window._d=cd;} else if(d===1){r=null;} else if(m>0){window._m=m-1;r=fn();window._m=cm;} else r=null; return r;}
+function prevScope(fn){const n=rangeDays().length;const cf=FROM,ct=TO;
+ const nt=new Date(cf.y,cf.mo,cf.d);nt.setDate(nt.getDate()-1);const nf=new Date(nt);nf.setDate(nf.getDate()-(n-1));
+ FROM={y:nf.getFullYear(),mo:nf.getMonth(),d:nf.getDate()};TO={y:nt.getFullYear(),mo:nt.getMonth(),d:nt.getDate()};
+ const r=fn();FROM=cf;TO=ct;return r;}
 
 /* ===== BỘ LỌC (mọi trang) ===== */
-function renderFilters(){const f=document.getElementById('filters');
- if(curr==="SRC"){f.innerHTML='';return;}
- const m=window._m,d=window._d;let dayOpts='<option value="0">Cả tháng</option>';
- if(m>=0)for(let i=1;i<=DAYS_IN[m];i++)dayOpts+=`<option value="${i}" ${d===i?'selected':''}>Ngày ${i}</option>`;
+function renderFilters(){const f=document.getElementById('filters');if(curr==="SRC"){f.innerHTML='';return;}
  f.innerHTML=`
-   <div class="fg"><label>Năm</label><select id="fY"><option>2026</option></select></div>
-   <div class="fg"><label>Tháng</label><select id="fM" onchange="onM(this.value)">
-     <option value="-1" ${m<0?'selected':''}>Cả năm</option>
-     ${MN.map((x,i)=>`<option value="${i}" ${m===i?'selected':''}>Tháng ${i+1}</option>`).join('')}
-   </select></div>
-   <div class="fg"><label>Ngày</label><select id="fD" onchange="window._d=+this.value;applyFilter()" ${m<0?'disabled':''}>${dayOpts}</select></div>
-   <button class="btn" onclick="applyFilter()">↻ Làm mới</button>`;
-}
-function onM(v){window._m=+v;window._d=0;renderFilters();applyFilter();}
+  <div class="fg"><label>Từ ngày</label><input type="date" id="fFrom" value="${iso(FROM)}" min="2026-01-01" max="2026-12-31" onchange="setRange(this.value,null)"></div>
+  <div class="fg"><label>Đến ngày</label><input type="date" id="fTo" value="${iso(TO)}" min="2026-01-01" max="2026-12-31" onchange="setRange(null,this.value)"></div>
+  <div class="fg"><label>Nhanh</label><div class="presets"><button class="pbtn" onclick="preset(7)">7N</button><button class="pbtn" onclick="preset(30)">30N</button><button class="pbtn" onclick="preset('m')">Tháng này</button><button class="pbtn" onclick="preset('y')">Cả kỳ</button></div></div>
+  <button class="btn" onclick="applyFilter()">↻ Làm mới</button>`;}
+function onM(v){window._m=+v;window._w=0;window._d=0;renderFilters();applyFilter();}
+function onW(v){window._w=+v;window._d=0;renderFilters();applyFilter();}
 function applyFilter(){document.getElementById('upd').textContent="Cập nhật "+new Date().toLocaleTimeString('vi-VN');render();}
 
 /* ===== RENDER TỪNG TRANG ===== */
 function render(){destroy();const host=document.getElementById('content');const R=PAGES[curr];
- if(window._m>=0&&window._d>0&&RAWLOADED.robux===undefined){ensureDaily();}
+ if(RAWLOADED.robux===undefined)ensureDaily();
  document.getElementById('rtitle').innerHTML=R.title;
  document.getElementById('rmeta').innerHTML=`<span class="badge" style="background:#1e5fd0">Phạm vi: ${scopeLabel()}</span> &nbsp; ${R.meta}`;
  R.render(host);}
 
 const PAGES={
- TQ:{title:"Tổng quan vận hành",meta:"Nhập/Xuất/Thiệt hại toàn SPDV",render(host){
+ TQ:{title:"Tổng quan vận hành",meta:"Nhập/Xuất/Thiệt hại toàn SPDV (trừ Topup)",render(host){
+   const ST=SPDV.filter(x=>x!=='Topup');
    const sc=scopeData();const prev=prevScope(scopeData);const mom=prev&&prev.totalNhap?sc.totalNhap/prev.totalNhap-1:0;
-   const cmp=window._m<0?"vs kỳ trước":(window._d>0?"DoD":"MoM");
    host.innerHTML=`<div class="kpis">
-     ${kpi("Tổng CO Nhập",fmt(sc.totalNhap),prev?`<span class="${cls(mom)}">${arrow(mom)}${cmp} ${pct(mom)}</span>`:'—')}
+     ${kpi("Tổng CO Nhập",fmt(sc.totalNhap),prev?`<span class="${cls(mom)}">${arrow(mom)}kỳ trước ${pct(mom)}</span>`:'—')}
      ${kpi("CO Robux",fmt(sc.nhap["Robux"]),"gamepass")}
      ${kpi("Thiệt hại (die/lỗi)",fmt(sc.totalDie),"Gross Loss "+pct(sc.totalDie/(sc.totalNhap||1)))}
      ${kpi("Robux Dồn (thu hồi)",fmt(sc.don),"tái sử dụng")}</div>
-    <div class="grid3">${cc("Tỉ trọng CO Nhập theo SPDV","tq1")}${cc(window._m<0?"CO Nhập theo tháng":"CO Nhập theo ngày","tq2")}${cc("Nhập vs Xuất theo SPDV","tq3")}</div>
-    <div class="grid2">${cc("Thiệt hại theo SPDV","tq4")}${cc("Top NCC Robux","tq5")}</div>`;
-   mk("tq1",donut(SPDV,SPDV.map(s=>sc.nhap[s]),SPDV.map(s=>SPCOL[s])));
-   const tr=trend(monthNhap,7);mk("tq2",trendCfg(tr));
-   mk("tq3",{type:'bar',data:{labels:SPDV.map(shortSP),datasets:[{label:'Nhập',data:SPDV.map(s=>sc.nhap[s]),backgroundColor:'#1e5fd0'},{label:'Xuất',data:SPDV.map(s=>sc.xuat[s]),backgroundColor:'#7cc4f7'}]},options:barOpt(true)});
-   mk("tq4",{type:'bar',data:{labels:SPDV.map(shortSP),datasets:[{data:SPDV.map(s=>sc.die[s]),backgroundColor:RED}]},options:hbarOpt()});
-   const f=factor();mk("tq5",{type:'bar',data:{labels:NCC_ROBUX.map(x=>x[0]),datasets:[{data:NCC_ROBUX.map(x=>x[1]*f),backgroundColor:NCC_ROBUX.map((_,i)=>i===0?'#0b3a8f':(i<4?'#1e5fd0':'#4aa8f0'))}]},options:hbarOpt()});
+    <div class="grid3">${cc("Tỉ trọng CO Nhập theo SPDV","tq1")}${cc("CO Nhập theo thời gian","tq2")}${cc("Nhập vs Xuất theo SPDV","tq3")}</div>
+    ${cc("Thiệt hại theo SPDV","tq4")}`;
+   mk("tq1",donut(ST,ST.map(s=>sc.nhap[s]),ST.map(s=>SPCOL[s])));
+   mk("tq2",trendCfg(trend(monthNhap,7)));
+   mk("tq3",{type:'bar',data:{labels:ST.map(shortSP),datasets:[{label:'Nhập',data:ST.map(s=>sc.nhap[s]),backgroundColor:'#1e5fd0'},{label:'Xuất',data:ST.map(s=>sc.xuat[s]),backgroundColor:'#7cc4f7'}]},options:barOpt(true)});
+   mk("tq4",{type:'bar',data:{labels:ST.map(shortSP),datasets:[{data:ST.map(s=>sc.die[s]),backgroundColor:RED}]},options:hbarOpt()});
  }},
- PVH1:{title:"PVH1 · NXT-Dồn-Die theo SPDV",meta:"Tần suất: Tháng/Ngày",render(host){
-   const sc=scopeData();
+ PVH1:{title:"PVH1 · Dồn & Die theo SPDV",meta:"Tần suất: Tháng/Tuần/Ngày",render(host){
+   const sc=scopeData();const dieT=sc.totalDie;
    host.innerHTML=`<div class="kpis">
-     ${kpi("Tổng CO Nhập",fmt(sc.totalNhap),scopeLabel())}
-     ${kpi("Tổng CO Xuất",fmt(sc.totalXuat),"")}
-     ${kpi("Thiệt hại",fmt(sc.totalDie),"die/lỗi")}
-     ${kpi("Robux Dồn",fmt(sc.don),"thu hồi")}</div>
-    <div class="grid3">${cc("CO Nhập theo "+(window._m<0?"tháng":"ngày"),"p1a")}${cc("Tỉ trọng Nhập theo SPDV","p1b")}${cc("Nhập·Xuất·Die","p1c")}</div>
-    <div class="card"><h3>Bảng NXT-Dồn-Die theo SPDV — ${scopeLabel()}</h3><div class="scroll"><table class="tbl"><thead><tr><th>SPDV</th><th class="n">Nhập</th><th class="n">Xuất</th><th class="n">Die</th><th class="n">Dồn</th></tr></thead><tbody>
-    ${SPDV.map(s=>`<tr><td>${s}</td><td class="n">${fmtn(sc.nhap[s])}</td><td class="n">${fmtn(sc.xuat[s])}</td><td class="n">${fmtn(sc.die[s])}</td><td class="n">${s==='Robux'?fmtn(sc.don):'-'}</td></tr>`).join('')}
-    </tbody></table></div></div>`;
-   mk("p1a",trendCfg(trend(monthNhap,7)));
-   mk("p1b",donut(SPDV,SPDV.map(s=>sc.nhap[s]),SPDV.map(s=>SPCOL[s])));
-   const trN=trend(monthNhap,7),trX=trend(m=>SPDV.reduce((a,s)=>a+XUAT[s][m],0),17),trD=trend(m=>Object.keys(DIE).reduce((a,s)=>a+DIE[s][m],0),7);
-   mk("p1c",{type:'bar',data:{labels:trN.labels,datasets:[{label:'Nhập',data:trN.values,backgroundColor:'#1e5fd0'},{label:'Xuất',data:trX.values,backgroundColor:'#7cc4f7'},{label:'Die',data:trD.values,backgroundColor:RED}]},options:barOpt(true)});
+     ${kpi("Tổng Die / Thiệt hại",fmt(dieT),scopeLabel())}
+     ${kpi("Die Robux",fmt(sc.die["Robux"]),"lớn nhất")}
+     ${kpi("Robux Dồn (thu hồi)",fmt(sc.don),"tái sử dụng")}
+     ${kpi("Die / (Die+Dồn)",pct(dieT/((dieT+sc.don)||1)),"tỷ lệ mất thực")}</div>
+    <div class="grid3">${cc("Die theo SPDV","p1a")}${cc("Die theo "+lvl(),"p1b")}${cc("Dồn Robux theo "+lvl(),"p1c")}</div>
+    <div class="card"><h3>Bảng Die & Dồn theo SPDV — ${scopeLabel()}</h3><div class="scroll"><table class="tbl"><thead><tr><th>SPDV</th><th class="n">Die</th><th class="n">Dồn</th></tr></thead><tbody>
+    ${SPDV.map(s=>`<tr><td>${s}</td><td class="n">${fmtn(sc.die[s])}</td><td class="n">${s==='Robux'?fmtn(sc.don):'-'}</td></tr>`).join('')}</tbody></table></div></div>`;
+   mk("p1a",{type:'bar',data:{labels:SPDV.map(shortSP),datasets:[{data:SPDV.map(s=>sc.die[s]),backgroundColor:RED}]},options:hbarOpt()});
+   const trDie=trend(m=>Object.keys(DIE).reduce((a,s)=>a+DIE[s][m],0),7);
+   mk("p1b",{type:'line',data:{labels:trDie.labels,datasets:[{data:trDie.values,fill:true,backgroundColor:'rgba(244,63,94,.16)',borderColor:RED,borderWidth:2,tension:.35,pointRadius:3}]},options:barOpt(false)});
+   const trDon=trend(m=>DON.Robux[m],999);
+   mk("p1c",{type:'bar',data:{labels:trDon.labels,datasets:[{data:trDon.values,backgroundColor:GREEN,borderRadius:2}]},options:barOpt(false)});
  }},
- PVH2:{title:"PVH2 · NXT theo NCC (SPDV)",meta:"Tần suất: Tháng",render(host){
-   const f=factor();const list=NCC_ROBUX.map(([n,v])=>[n,v*f]);const tot=list.reduce((a,x)=>a+x[1],0);
-   host.innerHTML=`<div class="row"><span class="small">SPDV:</span><select><option>Robux</option><option>Gift Card</option><option>Razer Gold</option></select><span class="small">· demo: NCC Robux · ${scopeLabel()}</span></div>
-    <div class="kpis">${kpi("Số NCC",NCC_ROBUX.length,"Robux")}${kpi("Top 1",NCC_ROBUX[0][0],pct(list[0][1]/(tot||1)))}${kpi("Top 4 tập trung",pct(list.slice(0,4).reduce((a,x)=>a+x[1],0)/(tot||1)),"rủi ro phụ thuộc")}${kpi("Tổng CO",fmt(tot),scopeLabel())}</div>
-    <div class="grid2">${cc("Top NCC Robux theo CO","p2a")}<div class="card"><h3>Bảng NCC — ${scopeLabel()}</h3><div class="scroll"><table class="tbl"><thead><tr><th>NCC</th><th class="n">CO</th><th class="n">%</th></tr></thead><tbody>${list.map(x=>`<tr><td>${x[0]}</td><td class="n">${fmtn(x[1])}</td><td class="n">${pct(x[1]/(tot||1))}</td></tr>`).join('')}</tbody></table></div></div></div>`;
-   mk("p2a",{type:'bar',data:{labels:list.map(x=>x[0]),datasets:[{data:list.map(x=>x[1]),backgroundColor:list.map((_,i)=>i===0?'#0b3a8f':(i<4?'#1e5fd0':'#4aa8f0'))}]},options:hbarOpt()});
+ PVH2:{title:"PVH2 · NXT theo NCC (phân theo SPDV)",meta:"Tần suất: Tháng",render(host){
+   const f=factor();const src=Object.keys(NCC_ALL).length?NCC_ALL:{"Robux":NCC_ROBUX};
+   const sps=SPDV.filter(s=>src[s]&&src[s].length);
+   host.innerHTML=`<div class="small" style="margin-bottom:10px">Phạm vi ${scopeLabel()} · nguồn: Data theo NCC (live) · ${sps.length} SPDV có NCC</div>
+     <div class="grid2">`+sps.map((sp,idx)=>{const list=src[sp].map(x=>[x[0],x[1]*f]);const tot=list.reduce((a,x)=>a+x[1],0);
+       return `<div class="card"><h3>${sp} — ${list.length} NCC · ${fmt(tot)}</h3><div class="chartbox sm"><canvas id="p2_${idx}"></canvas></div>
+         <div class="scroll" style="max-height:150px;margin-top:8px"><table class="tbl"><tbody>${list.slice(0,8).map(x=>`<tr><td>${x[0]}</td><td class="n">${fmtn(x[1])}</td><td class="n">${pct(x[1]/(tot||1))}</td></tr>`).join('')}</tbody></table></div></div>`;}).join('')+`</div>`;
+   sps.forEach((sp,idx)=>{const list=src[sp].slice(0,8).map(x=>[x[0],x[1]*f]);mk("p2_"+idx,{type:'bar',data:{labels:list.map(x=>x[0]),datasets:[{data:list.map(x=>x[1]),backgroundColor:list.map((_,i)=>i===0?'#0b3a8f':(i<4?'#1e5fd0':'#4aa8f0'))}]},options:hbarOpt()});});
  }},
  PVH8:{title:"PVH8 · Thất thoát / Gross Loss",meta:"★ BOD · Tháng/Ngày",render(host){
    const sc=scopeData();const gl=sc.totalDie/(sc.totalNhap||1);
@@ -320,13 +320,17 @@ const PAGES={
    mk("p8a",{type:'line',data:{labels:trN.labels,datasets:[{data:glv,fill:true,backgroundColor:'rgba(244,63,94,.16)',borderColor:RED,borderWidth:2,tension:.35,pointRadius:trN.labels.length>12?2:3,pointBackgroundColor:trN.labels.map((_,i)=>i===trN.hl?'#0b3a8f':RED)}]},options:{plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.parsed.y+'%'}}},scales:{x:noX,y:{...yG,beginAtZero:true,ticks:{callback:v=>v+'%'}}}}});
    mk("p8b",{type:'bar',data:{labels:Object.keys(DIE),datasets:[{data:Object.keys(DIE).map(s=>sc.die[s]),backgroundColor:RED}]},options:hbarOpt()});
  }},
- PVH3:{title:"PVH3 · NXT theo Nhân viên",meta:"Nguồn: NGƯỜI NHẬP (Robux)",render(host){
-   const f=factor();const totC=STAFF.reduce((a,x)=>a+x[1],0);const totV=sval(NHAP["Robux"],5*31);
-   const list=STAFF.map(([nv,c])=>({nv,c,v:Math.round(totV*c/totC)}));
-   host.innerHTML=`<div class="ok">Nguồn thật: cột NGƯỜI NHẬP (Data Robux). Giá trị theo phạm vi ${scopeLabel()} (phân bổ mẫu theo số lệnh).</div>
-    <div class="kpis" style="margin-top:12px">${kpi("Số nhân viên",STAFF.length,"nhập Robux")}${kpi("NV top 1",STAFF[0][0],pct(STAFF[0][1]/totC)+" số lệnh")}${kpi("Tổng lệnh (co kỳ)",fmtn(Math.round(totC*f)),"dòng")}${kpi("CO Robux",fmt(totV),scopeLabel())}</div>
-    <div class="grid2">${cc("CO nhập theo nhân viên","p3a")}<div class="card"><h3>Bảng nhân viên</h3><div class="scroll"><table class="tbl"><thead><tr><th>Nhân viên</th><th class="n">CO</th><th class="n">Số lệnh</th></tr></thead><tbody>${list.map(x=>`<tr><td>${x.nv}</td><td class="n">${fmtn(x.v)}</td><td class="n">${fmtn(Math.round(x.c*f))}</td></tr>`).join('')}</tbody></table></div></div></div>`;
-   mk("p3a",{type:'bar',data:{labels:list.map(x=>x.nv),datasets:[{data:list.map(x=>x.v),backgroundColor:'#1e5fd0'}]},options:hbarOpt()});
+ PVH3:{title:"PVH3 · NXT theo Nhân viên (mỗi SPDV 1 dashboard)",meta:"Nguồn raw: Robux · Nick · Gift Card",render(host){
+   host.innerHTML=spinner("Đang tải dữ liệu nhân viên (Robux · Nick · Gift Card)…");
+   ensureRaw(['robux','nick','gc']).then(()=>{
+     const M={robux:'Robux',nick:'Nick Random Roblox',gc:'Gift Card'};const KS=['robux','nick','gc'];
+     let h=`<div class="small" style="margin-bottom:10px">Phạm vi ${scopeLabel()} · giá trị = CO nhập theo nhân viên</div><div class="grid2">`;
+     KS.forEach((key,idx)=>{const list=groupSum(key,'emp');const tot=list.reduce((a,x)=>a+x[1],0);
+       h+=`<div class="card"><h3>${M[key]} — ${list.length} NV · ${fmt(tot)}</h3><div class="chartbox sm"><canvas id="p3_${idx}"></canvas></div>
+         <div class="scroll" style="max-height:150px;margin-top:8px"><table class="tbl"><tbody>${list.slice(0,10).map(x=>`<tr><td>${x[0]}</td><td class="n">${fmtn(x[1])}</td><td class="n">${pct(x[1]/(tot||1))}</td></tr>`).join('')}</tbody></table></div></div>`;});
+     h+='</div>';host.innerHTML=h;
+     KS.forEach((key,idx)=>{const list=groupSum(key,'emp').slice(0,10);mk("p3_"+idx,{type:'bar',data:{labels:list.map(x=>x[0]),datasets:[{data:list.map(x=>x[1]),backgroundColor:'#1e5fd0'}]},options:hbarOpt()});});
+   });
  }},
  PVH9:{title:"PVH9 · Automation / thủ công",meta:"★ BOD",render(host){
    const f=factor();const bot=Math.round(RAZER.bot*f),tay=Math.max(0,Math.round(RAZER.tay*f)),tot=bot+tay;
@@ -351,13 +355,25 @@ const PAGES={
    mk("p12a",donut(NICK_ST.map(x=>x[0]),NICK_ST.map(x=>Math.round(x[1]*f)),BLUE));
  }},
  PVH4:{title:"PVH4 · Biến động giá vốn / tháng",meta:"Tần suất: Tháng",render:h=>framed(h,"Đơn giá BQ = CO Nhập / SL. Demo hiển thị CO Nhập theo SPDV (theo phạm vi); cần SL tổng ở L2 để ra đơn giá BQ.")},
- PVH5:{title:"PVH5 · Biến động giá vốn / NCC",meta:"Tần suất: Tháng",render:h=>PAGES.PVH2.render(h)},
+ PVH5:{title:"PVH5 · Biến động giá vốn theo NCC (mỗi SPDV 1 mục)",meta:"Nguồn raw: Robux · Nick · Gift Card",render(host){
+   host.innerHTML=spinner("Đang tải giá vốn theo NCC (Robux · Nick · Gift Card)…");
+   ensureRaw(['robux','nick','gc']).then(()=>{
+     const M={robux:'Robux',nick:'Nick Random Roblox',gc:'Gift Card'};const KS=['robux','nick','gc'];
+     let h=`<div class="small" style="margin-bottom:10px">Phạm vi ${scopeLabel()} · giá vốn = đơn giá bình quân theo NCC (VND)</div><div class="grid2">`;
+     KS.forEach((key,idx)=>{const list=groupAvgUnit(key,'ncc');
+       h+=`<div class="card"><h3>${M[key]} — ${list.length} NCC</h3><div class="chartbox sm"><canvas id="p5_${idx}"></canvas></div>
+         <div class="scroll" style="max-height:150px;margin-top:8px"><table class="tbl"><thead><tr><th>NCC</th><th class="n">Giá vốn BQ</th></tr></thead><tbody>${list.slice(0,10).map(x=>`<tr><td>${x[0]}</td><td class="n">${fmtn(x[1])}</td></tr>`).join('')}</tbody></table></div></div>`;});
+     h+='</div>';host.innerHTML=h;
+     KS.forEach((key,idx)=>{const list=groupAvgUnit(key,'ncc').slice(0,10);mk("p5_"+idx,{type:'bar',data:{labels:list.map(x=>x[0]),datasets:[{data:list.map(x=>x[1]),backgroundColor:'#2e86e6'}]},options:hbarOpt()});});
+   });
+ }},
  PVH6:{title:"PVH6 · Tồn & tuổi tồn",meta:"Tần suất: Tuần",render:h=>frameOnly(h,"Cần nguồn TỒN thống nhất (RBX/Razer/GC có tồn riêng; Robux tồn ở Hub/Daily). Tuổi tồn cần ngày nhập từng đơn vị.")},
  PVH7:{title:"PVH7 · Đối soát Tiền–Hàng–Đơn",meta:"Tần suất: Tuần",render:h=>frameOnly(h,"Xương sống P&L: Backend(đơn) ↔ Kho(hàng) ↔ Kế toán(tiền). Cần chốt logic đối soát GC (3 ví BSV) & Topup.")},
  PVH11:{title:"PVH11 · Tỷ lệ lỗi nhập theo SPDV",meta:"Tần suất: Tháng",render:h=>framed(h,"Robux die/dồn (có). Cần bổ sung response/uptime API NCC; GC KBH/khiếu nại; Account hoàn theo NCC.")},
 };
 
 /* ==== chart cfg helpers ==== */
+function lvl(){return rangeDays().length<=31?"ngày":"tháng";}
 function shortSP(s){return s.replace("Nick Random Roblox","Nick").replace("Razer Gold","Razer").replace("Gift Card","GC");}
 function donut(labels,data,colors,sm){return{type:'doughnut',data:{labels,datasets:[{data,backgroundColor:colors,borderColor:'#fff',borderWidth:1}]},options:{cutout:'56%',plugins:{legend:{position:'right',labels:{boxWidth:10,font:{size:10},padding:4}},tooltip:{callbacks:{label:c=>c.label+': '+fmt(c.parsed)}}}}};}
 function barOpt(stackLegend){return{plugins:{legend:{display:!!stackLegend,position:'top',labels:{boxWidth:10}},tooltip:{callbacks:{label:c=>(c.dataset.label?c.dataset.label+': ':'')+fmt(c.parsed.y)}}},scales:{x:noX,y:{...yG,ticks:{callback:fmt}}}};}
@@ -378,6 +394,25 @@ let DAILY={nhap:{},xuat:{},die:{},don:{},_donLoaded:false};
 let RAWLOADED={};
 function pad(n){return(''+n).padStart(2,'0');}
 function dkey(m,d){return '2026-'+pad(m+1)+'-'+pad(d);}
+function pad2(n){return(''+n).padStart(2,'0');}
+function iso(o){return o.y+'-'+pad2(o.mo+1)+'-'+pad2(o.d);}
+function parseISO(x){const p=x.split('-');return{y:+p[0],mo:+p[1]-1,d:+p[2]};}
+function clampD(o){let t=new Date(o.y,o.mo,o.d);const mn=new Date(2026,0,1),mx=new Date(2026,11,31);if(t<mn)t=mn;if(t>mx)t=mx;return{y:t.getFullYear(),mo:t.getMonth(),d:t.getDate()};}
+function setRange(from,to){if(from)FROM=clampD(parseISO(from));if(to)TO=clampD(parseISO(to));
+ const a=new Date(FROM.y,FROM.mo,FROM.d),b=new Date(TO.y,TO.mo,TO.d);if(a>b){const t=FROM;FROM=TO;TO=t;}
+ const ff=document.getElementById('fFrom'),ft=document.getElementById('fTo');if(ff)ff.value=iso(FROM);if(ft)ft.value=iso(TO);
+ applyFilter();}
+function preset(k){const mx=new Date(DATA_MAX.y,DATA_MAX.mo,DATA_MAX.d);
+ if(k==='y'){FROM={y:2026,mo:0,d:1};TO={y:DATA_MAX.y,mo:DATA_MAX.mo,d:DATA_MAX.d};}
+ else if(k==='m'){FROM={y:DATA_MAX.y,mo:DATA_MAX.mo,d:1};TO={y:DATA_MAX.y,mo:DATA_MAX.mo,d:DATA_MAX.d};}
+ else{const f=new Date(mx);f.setDate(f.getDate()-(k-1));FROM={y:f.getFullYear(),mo:f.getMonth(),d:f.getDate()};TO={y:DATA_MAX.y,mo:DATA_MAX.mo,d:DATA_MAX.d};}
+ const ff=document.getElementById('fFrom'),ft=document.getElementById('fTo');if(ff)ff.value=iso(FROM);if(ft)ft.value=iso(TO);
+ applyFilter();}
+function rangeDays(){const out=[];const a=new Date(FROM.y,FROM.mo,FROM.d),b=new Date(TO.y,TO.mo,TO.d);for(let t=new Date(a);t<=b;t.setDate(t.getDate()+1))out.push({y:t.getFullYear(),mo:t.getMonth(),d:t.getDate()});return out;}
+function monthsInRange(){const mm={};rangeDays().forEach(x=>{if(x.y===2026&&x.mo<6)mm[x.mo]=(mm[x.mo]||0)+1;});return mm;}
+function aggArr(arr,sp,map,seed){if(map&&sp&&map[sp]){let t=0;rangeDays().forEach(x=>{if(x.y===2026)t+=map[sp][dkey(x.mo,x.d)]||0;});return t;}const mm=monthsInRange();let t=0;for(const m in mm){const mi=+m;t+=(arr&&arr[mi]?arr[mi]:0)*mm[m]/DAYS_IN[mi];}return Math.round(t);}
+function parseFX(rows){const map={};for(let r=0;r<rows.length;r++){const row=rows[r]||[];const dt=parseDateCell(row[1]);const rate=num(row[2]);if(dt&&rate>0)map[dkey(dt.mo,dt.d)]=rate;}if(Object.keys(map).length){FXMAP=map;FXKEYS=Object.keys(map).sort();}}
+function fxRate(key){if(FXMAP[key])return FXMAP[key];let best=0;for(const k of FXKEYS){if(k<=key)best=FXMAP[k];else break;}return best;}
 function parseDateCell(v){if(v==null)return null;v=(''+v).trim();let m=v.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);if(m)return{mo:+m[2]-1,d:+m[3]};m=v.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);if(m){let a=+m[1],b=+m[2],mo,dd;if(a>12){dd=a;mo=b;}else if(b>12){mo=a;dd=b;}else{dd=a;mo=b;}return{mo:mo-1,d:dd};}const dt=new Date(v);return isNaN(dt)?null:{mo:dt.getMonth(),d:dt.getDate()};}
 function hIdx(rows,need){for(let r=0;r<Math.min(rows.length,15);r++){const row=(rows[r]||[]).map(x=>(''+x).trim());if(need.every(n=>row.includes(n))){const i={};row.forEach((v,c)=>{if(!(v in i))i[v]=c;});return{r,i};}}return{r:-1,i:{}};}
 function findc(row,re){if(!row)return -1;for(let c=0;c<row.length;c++)if(re.test((''+row[c]).trim()))return c;return -1;}
@@ -391,6 +426,26 @@ function buildRobux(rows){const H=hIdx(rows,['NGÀY NHẬP','THÀNH TIỀN']);if
 async function ensureDaily(){if(RAWLOADED.robux!==undefined)return;RAWLOADED.robux='loading';
  const rows=await fetchCSV(RAWURL_ROBUX);RAWLOADED.robux=(rows&&rows.length&&buildRobux(rows))?true:'failed';
  if(curr!=="SRC")render();}
+
+
+/* ===== ENGINE đọc raw theo cột đã verify (PVH3/PVH5; PVH4 nhịp sau) ===== */
+const RAWCFG={
+ robux:{gid:562469906,date:0,val:3,unit:2,emp:5,ncc:4,cat:6,usd:false,sp:"Robux"},
+ nick:{gid:61864847,date:0,val:5,unit:5,emp:1,ncc:6,cat:3,usd:false,sp:"Nick Random Roblox"},
+ gc:{gid:1043029815,date:13,val:10,unit:10,emp:16,ncc:5,cat:8,usd:false,sp:"Gift Card"},
+ razer:{gid:1868031300,date:0,val:5,unit:3,emp:-1,ncc:-1,cat:-1,usd:true,sp:"Razer Gold"},
+ og:{gid:793401472,date:8,val:6,unit:6,emp:-1,ncc:-1,cat:2,usd:true,sp:"Topup"}
+};
+let RAWDATA={},RAWSTATE={};
+function fetchRaw(key){if(RAWDATA[key])return Promise.resolve(RAWDATA[key]);if(RAWSTATE[key])return RAWSTATE[key];
+ const cfg=RAWCFG[key];const url=BASE+"?gid="+cfg.gid+"&single=true&output=csv";
+ RAWSTATE[key]=new Promise(res=>{try{Papa.parse(url,{download:true,complete:r=>{const recs=[];(r.data||[]).forEach(row=>{const dt=parseDateCell(row[cfg.date]);if(!dt||dt.mo<0)return;recs.push({dk:dkey(dt.mo,dt.d),val:num(row[cfg.val]),unit:num(row[cfg.unit]),emp:cfg.emp>=0?(''+(row[cfg.emp]||'')).trim():'',ncc:cfg.ncc>=0?(''+(row[cfg.ncc]||'')).trim():'',cat:cfg.cat>=0?(''+(row[cfg.cat]||'')).trim():''});});RAWDATA[key]=recs;res(recs);},error:()=>{RAWDATA[key]=[];res([]);}});}catch(e){RAWDATA[key]=[];res([]);}});
+ return RAWSTATE[key];}
+function ensureRaw(keys){return Promise.all(keys.map(fetchRaw));}
+function recsIn(key){const cfg=RAWCFG[key],fk=iso(FROM),tk=iso(TO);return (RAWDATA[key]||[]).filter(r=>r.dk>=fk&&r.dk<=tk).map(r=>({emp:r.emp,ncc:r.ncc,cat:r.cat,valv:cfg.usd?r.val*fxRate(r.dk):r.val,unitv:cfg.usd?r.unit*fxRate(r.dk):r.unit}));}
+function groupSum(key,field){const o={};recsIn(key).forEach(r=>{const k=r[field]||'(trống)';o[k]=(o[k]||0)+r.valv;});return Object.entries(o).filter(x=>x[0]!=='(trống)').sort((a,b)=>b[1]-a[1]);}
+function groupAvgUnit(key,field){const o={},c={};recsIn(key).forEach(r=>{const k=r[field]||'(trống)';o[k]=(o[k]||0)+r.unitv;c[k]=(c[k]||0)+1;});return Object.entries(o).filter(x=>x[0]!=='(trống)').map(([k,v])=>[k,c[k]?Math.round(v/c[k]):0]).sort((a,b)=>b[1]-a[1]);}
+function spinner(t){return '<div class="center"><div class="spin"></div>'+t+'</div>';}
 
 /* ===== ROUTER ===== */
 const TIERS=[[1,"Tầng 1 · Điều hành (CEO · Tháng)",["PVH1","PVH2","PVH8"]],[2,"Tầng 2 · Kiểm soát (Leader · Tuần)",["PVH3","PVH4","PVH5","PVH6","PVH7","PVH9","PVH10","PVH11","PVH12"]]];
