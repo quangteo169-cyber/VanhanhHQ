@@ -413,7 +413,7 @@ function rangeDays(){const out=[];const a=new Date(FROM.y,FROM.mo,FROM.d),b=new 
 function monthsInRange(){const mm={};rangeDays().forEach(x=>{if(x.y===2026&&x.mo<6)mm[x.mo]=(mm[x.mo]||0)+1;});return mm;}
 function aggArr(arr,sp,map,seed){if(map&&sp&&map[sp]){let t=0;rangeDays().forEach(x=>{if(x.y===2026)t+=map[sp][dkey(x.mo,x.d)]||0;});return t;}const mm=monthsInRange();let t=0;for(const m in mm){const mi=+m;t+=(arr&&arr[mi]?arr[mi]:0)*mm[m]/DAYS_IN[mi];}return Math.round(t);}
 function parseFX(rows){const map={};for(let r=0;r<rows.length;r++){const row=rows[r]||[];const dt=parseDateCell(row[1]);const rate=num(row[2]);if(dt&&rate>0)map[dkey(dt.mo,dt.d)]=rate;}if(Object.keys(map).length){FXMAP=map;FXKEYS=Object.keys(map).sort();}}
-function fxRate(key){if(FXMAP[key])return FXMAP[key];let best=0;for(const k of FXKEYS){if(k<=key)best=FXMAP[k];else break;}return best;}
+function fxRate(key){if(FXMAP[key])return FXMAP[key];let best=0;for(const k of FXKEYS){if(k<=key)best=FXMAP[k];else break;}if(best)return best;return FXKEYS.length?FXMAP[FXKEYS[0]]:0;}
 function parseDateCell(v){if(v==null)return null;v=(''+v).trim();let m=v.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);if(m)return{mo:+m[2]-1,d:+m[3]};m=v.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);if(m){let a=+m[1],b=+m[2],mo,dd;if(a>12){dd=a;mo=b;}else if(b>12){mo=a;dd=b;}else{dd=a;mo=b;}return{mo:mo-1,d:dd};}const dt=new Date(v);return isNaN(dt)?null:{mo:dt.getMonth(),d:dt.getDate()};}
 function hIdx(rows,need){for(let r=0;r<Math.min(rows.length,15);r++){const row=(rows[r]||[]).map(x=>(''+x).trim());if(need.every(n=>row.includes(n))){const i={};row.forEach((v,c)=>{if(!(v in i))i[v]=c;});return{r,i};}}return{r:-1,i:{}};}
 function findc(row,re){if(!row)return -1;for(let c=0;c<row.length;c++)if(re.test((''+row[c]).trim()))return c;return -1;}
@@ -433,19 +433,19 @@ async function ensureDaily(){if(RAWLOADED.robux!==undefined)return;RAWLOADED.rob
 const RAWCFG={
  robux:{gid:562469906,date:0,val:3,unit:2,emp:5,ncc:4,cat:6,usd:false,sp:"Robux"},
  nick:{gid:61864847,date:0,val:5,unit:5,emp:1,ncc:6,cat:3,usd:false,sp:"Nick Random Roblox"},
- gc:{gid:1043029815,date:13,val:10,unit:10,emp:16,ncc:5,cat:8,usd:false,sp:"Gift Card"},
+ gc:{gid:1043029815,date:13,val:10,unit:10,emp:16,ncc:5,cat:8,usd:true,onlyCol:3,onlyVal:"thêm mới code",sp:"Gift Card"},
  razer:{gid:1868031300,date:0,val:5,unit:3,emp:-1,ncc:-1,cat:-1,usd:true,sp:"Razer Gold"},
  og:{gid:793401472,date:8,val:6,unit:6,emp:-1,ncc:-1,cat:2,usd:true,sp:"Topup"}
 };
 let RAWDATA={},RAWSTATE={};
 function fetchRaw(key){if(RAWDATA[key])return Promise.resolve(RAWDATA[key]);if(RAWSTATE[key])return RAWSTATE[key];
  const cfg=RAWCFG[key];const url=BASE+"?gid="+cfg.gid+"&single=true&output=csv";
- RAWSTATE[key]=new Promise(res=>{try{Papa.parse(url,{download:true,complete:r=>{const recs=[];(r.data||[]).forEach(row=>{const dt=parseDateCell(row[cfg.date]);if(!dt||dt.mo<0)return;recs.push({dk:dkey(dt.mo,dt.d),val:num(row[cfg.val]),unit:num(row[cfg.unit]),emp:cfg.emp>=0?(''+(row[cfg.emp]||'')).trim():'',ncc:cfg.ncc>=0?(''+(row[cfg.ncc]||'')).trim():'',cat:cfg.cat>=0?(''+(row[cfg.cat]||'')).trim():''});});RAWDATA[key]=recs;res(recs);},error:()=>{RAWDATA[key]=[];res([]);}});}catch(e){RAWDATA[key]=[];res([]);}});
+ RAWSTATE[key]=new Promise(res=>{try{Papa.parse(url,{download:true,complete:r=>{const recs=[];(r.data||[]).forEach(row=>{const dt=parseDateCell(row[cfg.date]);if(!dt||dt.mo<0)return;if(cfg.onlyCol!=null&&(''+(row[cfg.onlyCol]||'')).trim().toLowerCase()!==cfg.onlyVal)return;recs.push({dk:dkey(dt.mo,dt.d),val:num(row[cfg.val]),unit:num(row[cfg.unit]),emp:cfg.emp>=0?(''+(row[cfg.emp]||'')).trim():'',ncc:cfg.ncc>=0?(''+(row[cfg.ncc]||'')).trim():'',cat:cfg.cat>=0?(''+(row[cfg.cat]||'')).trim():''});});RAWDATA[key]=recs;res(recs);},error:()=>{RAWDATA[key]=[];res([]);}});}catch(e){RAWDATA[key]=[];res([]);}});
  return RAWSTATE[key];}
 function ensureRaw(keys){return Promise.all(keys.map(fetchRaw));}
 function recsIn(key){const cfg=RAWCFG[key],fk=iso(FROM),tk=iso(TO);return (RAWDATA[key]||[]).filter(r=>r.dk>=fk&&r.dk<=tk).map(r=>({emp:r.emp,ncc:r.ncc,cat:r.cat,valv:cfg.usd?r.val*fxRate(r.dk):r.val,unitv:cfg.usd?r.unit*fxRate(r.dk):r.unit}));}
 function groupSum(key,field){const o={};recsIn(key).forEach(r=>{const k=r[field]||'(trống)';o[k]=(o[k]||0)+r.valv;});return Object.entries(o).filter(x=>x[0]!=='(trống)').sort((a,b)=>b[1]-a[1]);}
-function groupAvgUnit(key,field){const o={},c={};recsIn(key).forEach(r=>{const k=r[field]||'(trống)';o[k]=(o[k]||0)+r.unitv;c[k]=(c[k]||0)+1;});return Object.entries(o).filter(x=>x[0]!=='(trống)').map(([k,v])=>[k,c[k]?Math.round(v/c[k]):0]).sort((a,b)=>b[1]-a[1]);}
+function groupAvgUnit(key,field){const o={},c={};recsIn(key).forEach(r=>{if(r.unitv<=0)return;const k=r[field]||'(trống)';o[k]=(o[k]||0)+r.unitv;c[k]=(c[k]||0)+1;});return Object.entries(o).filter(x=>x[0]!=='(trống)').map(([k,v])=>[k,c[k]?Math.round(v/c[k]):0]).sort((a,b)=>b[1]-a[1]);}
 function spinner(t){return '<div class="center"><div class="spin"></div>'+t+'</div>';}
 
 /* ===== ROUTER ===== */
