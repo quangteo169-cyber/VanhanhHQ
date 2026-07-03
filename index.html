@@ -167,37 +167,40 @@ function num(x){if(x==null)return 0;x=(''+x).replace(/["\s₫đ$%]/g,'');if(x===
  if(x.indexOf(',')>-1&&x.indexOf('.')===-1){x=x.replace(/\./g,'').replace(',','.');}
  else{if((x.match(/\./g)||[]).length>1)x=x.replace(/\./g,'');x=x.replace(/,/g,'');}
  const n=parseFloat(x);return isNaN(n)?0:n;}
-function fetchCSV(url){return new Promise(res=>{try{Papa.parse(url,{download:true,complete:r=>res(r.data),error:()=>res(null)});}catch(e){res(null);}});}
+function papa1(url){return new Promise(res=>{try{Papa.parse(url,{download:true,complete:r=>res(r.data&&r.data.length?r.data:null),error:()=>res(null)});}catch(e){res(null);}});}
+async function loadCSV(url){let d=await papa1(url);if(d&&d.length>1)return d;try{const px="https://api.allorigins.win/raw?url="+encodeURIComponent(url);d=await papa1(px);}catch(e){}return d;}
+function fetchCSV(url){return loadCSV(url);}
 const MFULL=["Tháng 01","Tháng 02","Tháng 03","Tháng 04","Tháng 05","Tháng 06","Tháng 07","Tháng 08","Tháng 09","Tháng 10","Tháng 11","Tháng 12"];
+function monIdx(t){t=(''+t).trim();let m=t.match(/th[aá]ng\s*(\d{1,2})/i);if(m)return +m[1]-1;m=t.match(/^(\d{1,2})\/\d{4}$/);if(m)return +m[1]-1;m=t.match(/^T(\d{1,2})$/i);if(m)return +m[1]-1;return -1;}
 function parseSPDV(rows){let mrow=-1,col={};
- for(let r=0;r<rows.length;r++){if((rows[r]||[]).some(x=>(''+x).trim()==="Tháng 01")){mrow=r;break;}}
- if(mrow>=0)rows[mrow].forEach((v,c)=>{const t=(''+v).trim();if(MFULL.includes(t))col[t]=c;});
+ for(let r=0;r<rows.length;r++){if((rows[r]||[]).some(x=>monIdx(x)>=0)){mrow=r;break;}}
+ if(mrow>=0)rows[mrow].forEach((v,c)=>{const mi=monIdx(v);if(mi>=0&&!(mi in col))col[mi]=c;});
  const lab=kw=>{for(let r=0;r<rows.length;r++)if((rows[r]||[]).some(x=>(''+x).trim().toLowerCase()===kw.toLowerCase()))return r;return -1;};
  const iN=lab("Tổng CO Nhập"),iX=lab("Tổng CO Xuất"),iT=lab("Thiệt hại");
  const blk=(a,b)=>{const m={};for(let r=a+1;r<(b<0?rows.length:b);r++){const row=rows[r]||[];const L=(''+(row[3]||'')).trim();if(L)m[L]=row;}return m;};
  const nhap=blk(iN,iX),xuat=blk(iX,iT),th=blk(iT,-1);
- const val=(m,L,mn)=>{const row=m[L];if(!row)return 0;const c=col[mn];return c==null?0:num(row[c]);};
+ const val=(m,L,mi)=>{const row=m[L];if(!row)return 0;const c=col[mi];return c==null?0:num(row[c]);};
  const K=Object.keys(th);
- const thiethai=(sp,mn)=>{const f=fn=>{const k=K.find(fn);return k?val(th,k,mn):0;};
+ const thiethai=(sp,mi)=>{const f=fn=>{const k=K.find(fn);return k?val(th,k,mi):0;};
    if(sp==="Robux")return f(k=>/robux/i.test(k)&&/die/i.test(k));
    if(sp==="Gift Card")return f(k=>/gift/i.test(k)&&/lỗi/i.test(k))||f(k=>/gift/i.test(k));
    if(sp==="Nick Random Roblox")return f(k=>/nick/i.test(k)&&/die/i.test(k));
    if(sp==="Razer Gold")return f(k=>/razer/i.test(k));
    if(sp==="RBX")return f(k=>/rbx/i.test(k));return 0;};
- const don=mn=>{const k=K.find(k=>/dồn/i.test(k));return k?val(th,k,mn):0;};
+ const don=mi=>{const k=K.find(k=>/dồn/i.test(k));return k?val(th,k,mi):0;};
  return {val,nhap,xuat,thiethai,don};}
 function parseNCC(rows){let mrow=-1,col={};
- for(let r=0;r<rows.length;r++){if((rows[r]||[]).some(x=>(''+x).trim()==="Tháng 01")){mrow=r;break;}}
- if(mrow>=0)rows[mrow].forEach((v,c)=>{const t=(''+v).trim();if(MFULL.includes(t))col[t]=c;});
+ for(let r=0;r<rows.length;r++){if((rows[r]||[]).some(x=>monIdx(x)>=0)){mrow=r;break;}}
+ if(mrow>=0)rows[mrow].forEach((v,c)=>{const mi=monIdx(v);if(mi>=0&&!(mi in col))col[mi]=c;});
  const data={};let cur=null;
  for(let r=mrow+1;r<rows.length;r++){const row=rows[r]||[];const sp=(''+(row[2]||'')).trim(),ncc=(''+(row[3]||'')).trim();
   if(SPDV.includes(sp)){cur=sp;data[cur]=[];}else if(ncc&&cur&&!/^Tổng/i.test(ncc))data[cur].push(row);}
  return {data,col};}
 function applyLive(a,b){let ok=false;
  if(a&&a.length){const P=parseSPDV(a);let hit=false;
-   SPDV.forEach(sp=>{for(let i=0;i<6;i++){const mn="Tháng 0"+(i+1);const v=P.val(P.nhap,sp,mn);if(v)hit=true;NHAP[sp][i]=v;const xl=sp==="Token"?"Item (Token)":sp;XUAT[sp]=XUAT[sp]||[0,0,0,0,0,0];XUAT[sp][i]=P.val(P.xuat,sp,mn)||P.val(P.xuat,xl,mn);if(DIE[sp])DIE[sp][i]=P.thiethai(sp,mn);}});
-   for(let i=0;i<6;i++)DON.Robux[i]=P.don("Tháng 0"+(i+1));ok=hit;}
- if(b&&b.length){const N=parseNCC(b);const all={};Object.keys(N.data).forEach(sp=>{const arr=N.data[sp].map(row=>{const vals=[];for(let i=0;i<6;i++){const c=N.col["Tháng 0"+(i+1)];vals.push(c!=null?num(row[c]):0);}return[(''+(row[3]||'')).trim(),vals];}).filter(x=>x[0]&&x[1].some(v=>v>0));if(arr.length)all[sp]=arr;});if(Object.keys(all).length){NCC_ALL=all;const rb=all["Robux"];if(rb)NCC_ROBUX=rb.map(x=>[x[0],x[1].reduce((a,b)=>a+b,0)]).sort((a,b)=>b[1]-a[1]).slice(0,10);}}
+   SPDV.forEach(sp=>{for(let i=0;i<6;i++){const v=P.val(P.nhap,sp,i);if(v)hit=true;NHAP[sp][i]=v;XUAT[sp]=XUAT[sp]||[0,0,0,0,0,0];XUAT[sp][i]=P.val(P.xuat,sp,i)||P.val(P.xuat,sp==="Token"?"Item (Token)":sp,i);if(DIE[sp])DIE[sp][i]=P.thiethai(sp,i);}});
+   for(let i=0;i<6;i++)DON.Robux[i]=P.don(i);ok=hit;}
+ if(b&&b.length){const N=parseNCC(b);const all={};Object.keys(N.data).forEach(sp=>{const arr=N.data[sp].map(row=>{const vals=[];for(let i=0;i<6;i++){const c=N.col[i];vals.push(c!=null?num(row[c]):0);}return[(''+(row[3]||'')).trim(),vals];}).filter(x=>x[0]&&x[1].some(v=>v>0));if(arr.length)all[sp]=arr;});if(Object.keys(all).length){NCC_ALL=all;const rb=all["Robux"];if(rb)NCC_ROBUX=rb.map(x=>[x[0],x[1].reduce((a,b)=>a+b,0)]).sort((a,b)=>b[1]-a[1]).slice(0,10);}}
  return ok;}
 async function loadLive(){
  const [a,b,fx]=await Promise.all([fetchCSV(CSV.spdv),fetchCSV(CSV.ncc),fetchCSV(CSV.fx)]);
@@ -302,8 +305,8 @@ const PAGES={
  }},
  PVH2:{title:"PVH2 · NXT theo NCC (phân theo SPDV)",meta:"Nguồn: Data theo NCC (theo tháng)",render(host){
    const touched=Object.keys(monthsInRange()).map(Number);const src=NCC_ALL;const sps=SPDV.filter(s=>src[s]&&src[s].length);
-   if(!sps.length){host.innerHTML='<div class="note">Chưa tải được Data theo NCC — thử ↻ Làm mới.</div>';return;}
-   let h=`<div class="small" style="margin-bottom:10px">Phạm vi ${scopeLabel()} · CO theo NCC (cộng trọn các tháng chạm khoảng) · ${sps.length} SPDV</div><div class="grid2">`;
+   if(!sps.length){host.innerHTML=spinner("Đang tải Data theo NCC…");if(!window.__nccLoading){window.__nccLoading=1;fetchCSV(CSV.ncc).then(b=>{applyLive(null,b);window.__nccLoading=0;if(curr==='PVH2')render();});}return;}
+   let h=`<div class="small" style="margin-bottom:10px">Phạm vi ${scopeLabel()} · CO theo NCC (cộng trọn tháng chạm khoảng) · ${sps.length} SPDV</div><div class="grid2">`;
    sps.forEach((sp,idx)=>{const list=src[sp].map(x=>[x[0],touched.reduce((a,mi)=>a+(x[1][mi]||0),0)]).filter(x=>x[1]>0).sort((a,b)=>b[1]-a[1]);const tot=list.reduce((a,x)=>a+x[1],0);
      h+=`<div class="card"><h3>${sp} — ${list.length} NCC · ${fmt(tot)}</h3><div class="chartbox sm"><canvas id="p2_${idx}"></canvas></div>
        <div class="scroll" style="max-height:150px;margin-top:8px"><table class="tbl"><tbody>${list.slice(0,8).map(x=>`<tr><td>${x[0]}</td><td class="n">${fmtn(x[1])}</td><td class="n">${pct(x[1]/(tot||1))}</td></tr>`).join('')}</tbody></table></div></div>`;});
@@ -439,7 +442,7 @@ const RAWCFG={
 let RAWDATA={},RAWSTATE={};
 function fetchRaw(key){if(RAWDATA[key])return Promise.resolve(RAWDATA[key]);if(RAWSTATE[key])return RAWSTATE[key];
  const cfg=RAWCFG[key];const url=BASE+"?gid="+cfg.gid+"&single=true&output=csv";
- RAWSTATE[key]=new Promise(res=>{try{Papa.parse(url,{download:true,complete:r=>{const recs=[];(r.data||[]).forEach(row=>{const dt=parseDateCell(row[cfg.date]);if(!dt||dt.mo<0)return;if(cfg.onlyCol!=null&&(''+(row[cfg.onlyCol]||'')).trim().toLowerCase()!==cfg.onlyVal)return;recs.push({dk:dkey(dt.mo,dt.d),val:num(row[cfg.val]),unit:num(row[cfg.unit]),emp:cfg.emp>=0?(''+(row[cfg.emp]||'')).trim():'',ncc:cfg.ncc>=0?(''+(row[cfg.ncc]||'')).trim():'',cat:cfg.cat>=0?(''+(row[cfg.cat]||'')).trim():''});});RAWDATA[key]=recs;res(recs);},error:()=>{RAWDATA[key]=[];res([]);}});}catch(e){RAWDATA[key]=[];res([]);}});
+ RAWSTATE[key]=loadCSV(url).then(rows=>{const recs=[];(rows||[]).forEach(row=>{const dt=parseDateCell(row[cfg.date]);if(!dt||dt.mo<0)return;if(cfg.onlyCol!=null&&(''+(row[cfg.onlyCol]||'')).trim().toLowerCase()!==cfg.onlyVal)return;recs.push({dk:dkey(dt.mo,dt.d),val:num(row[cfg.val]),unit:num(row[cfg.unit]),emp:cfg.emp>=0?(''+(row[cfg.emp]||'')).trim():'',ncc:cfg.ncc>=0?(''+(row[cfg.ncc]||'')).trim():'',cat:cfg.cat>=0?(''+(row[cfg.cat]||'')).trim():''});});RAWDATA[key]=recs;return recs;});
  return RAWSTATE[key];}
 function ensureRaw(keys){return Promise.all(keys.map(fetchRaw));}
 function recsIn(key){const cfg=RAWCFG[key],fk=iso(FROM),tk=iso(TO);return (RAWDATA[key]||[]).filter(r=>r.dk>=fk&&r.dk<=tk).map(r=>({emp:r.emp,ncc:r.ncc,cat:r.cat,valv:cfg.usd?r.val*fxRate(r.dk):r.val,unitv:cfg.usd?r.unit*fxRate(r.dk):r.unit}));}
@@ -460,7 +463,7 @@ function go(id){curr=id;destroy();document.querySelectorAll('.nav').forEach(n=>n
  render();}
 function startApp(){buildNav();go('TQ');loadLive();setInterval(loadLive,60000);}
 (function(){let a=false;try{a=sessionStorage.getItem('pvh_auth')==='1'}catch(e){}if(a)showApp();})();
-setInterval(()=>{const e=document.getElementById('upd');if(e)e.textContent="Cập nhật "+new Date().toLocaleTimeString('vi-VN');},60000);
+
 </script>
 </body>
 </html>
