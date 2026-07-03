@@ -170,7 +170,7 @@ function num(x){if(x==null)return 0;x=(''+x).replace(/["\s₫đ$%]/g,'');if(x===
  const n=parseFloat(x);return isNaN(n)?0:n;}
 function papaT(url,ms){return new Promise(res=>{let done=false;const to=setTimeout(()=>{if(!done){done=true;res(null);}},ms);
  try{Papa.parse(url,{download:true,complete:r=>{if(done)return;done=true;clearTimeout(to);res(r.data&&r.data.length?r.data:null);},error:()=>{if(done)return;done=true;clearTimeout(to);res(null);}});}catch(e){if(!done){done=true;clearTimeout(to);res(null);}}});}
-async function loadCSV(url){return await papaT(url,15000);}
+async function loadCSV(url){try{const c=new AbortController();const to=setTimeout(()=>c.abort(),15000);const r=await fetch(url,{signal:c.signal});clearTimeout(to);if(!r.ok)return null;const t=await r.text();const p=Papa.parse(t,{});return (p&&p.data&&p.data.length>1)?p.data:null;}catch(e){return null;}}
 function fetchCSV(url){return loadCSV(url);}
 const MFULL=["Tháng 01","Tháng 02","Tháng 03","Tháng 04","Tháng 05","Tháng 06","Tháng 07","Tháng 08","Tháng 09","Tháng 10","Tháng 11","Tháng 12"];
 function monIdx(t){t=(''+t).trim();let m=t.match(/th[aá]ng\s*(\d{1,2})/i);if(m)return +m[1]-1;m=t.match(/^(\d{1,2})\/(\d{4})$/);if(m)return +m[1]-1;m=t.match(/^(\d{4})[-\/](\d{1,2})[-\/]\d{1,2}/);if(m)return +m[2]-1;m=t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);if(m)return +m[2]-1;m=t.match(/^T(\d{1,2})$/i);if(m)return +m[1]-1;return -1;}
@@ -461,11 +461,17 @@ const TIERS=[[1,"Tầng 1 · Điều hành (CEO · Tháng)",["PVH1","PVH2","PVH8
 function buildNav(){let h='';TIERS.forEach(([t,label,ids])=>{h+=`<div class="tier">${label}</div>`;
  ids.forEach(k=>{h+=`<div class="nav" data-id="${k}" onclick="go('${k}')"><span class="code">${k}</span><span class="dot" style="color:#2e86e6;background:#2e86e6"></span><span>${PAGES[k].title.split('· ')[1]}</span></div>`;});});
  document.getElementById('nav').innerHTML=h;}
+function renderSRC(){const host=document.getElementById('content');
+ const tests=[['Data theo SPDV','460836856'],['Data theo NCC','1758921427'],['Bảng tỉ giá','163849763'],['Data Robux','562469906'],['Data giftcard','1043029815'],['Data Razergold','1868031300'],['Data OGGAMING','793401472'],['Data Nick Roblox','61864847']];
+ host.innerHTML='<div class="card"><h3 style="text-align:left">Chẩn đoán nguồn dữ liệu (web gọi /api/csv)</h3><div class="scroll"><table class="tbl" id="diag"><thead><tr><th>Tab</th><th class="n">HTTP</th><th class="n">Số dòng</th><th>Dòng đầu / lỗi</th></tr></thead><tbody></tbody></table></div><div class="small" style="margin-top:8px">HTTP 200 &amp; Số dòng&gt;1 = đọc được (xanh). HTTP 404 = function chưa deploy. ERR = lỗi mạng/CORS.</div></div>';
+ const tb=document.querySelector('#diag tbody');
+ tests.forEach(([nm,gid])=>{const tr=document.createElement('tr');tr.innerHTML=`<td>${nm}</td><td class="n">…</td><td class="n">…</td><td class="small">đang gọi…</td>`;tb.appendChild(tr);
+   fetch(apiURL(gid)).then(r=>{tr.children[1].textContent=r.status;return r.text();}).then(t=>{const rows=t.split(/\r?\n/).filter(x=>x.length);tr.children[2].textContent=rows.length;tr.children[3].textContent=(rows[0]||'(rỗng)').slice(0,70);tr.children[3].style.color=rows.length>1?'#0f7a4d':'#9a3b2a';}).catch(e=>{tr.children[1].textContent='ERR';tr.children[3].textContent='Lỗi: '+e.message;tr.children[3].style.color='#9a3b2a';});});
+}
 function go(id){curr=id;destroy();document.querySelectorAll('.nav').forEach(n=>n.classList.toggle('active',n.dataset.id===id));
  renderFilters();
  document.getElementById('upd').textContent="Cập nhật "+new Date().toLocaleTimeString('vi-VN');
- if(id==="SRC"){document.getElementById('rtitle').textContent="Nguồn & Cấu hình";document.getElementById('rmeta').innerHTML="Raw → L2_TONGHOP (cấp Ngày) → web";
-  document.getElementById('content').innerHTML=`<div class="card"><h3 style="text-align:left">Kiến trúc dữ liệu</h3><p class="small" style="line-height:1.9">Raw (9 tab) → <b>L2_TONGHOP</b> (cấp Ngày, long-format: Ngày·Năm·Tháng·Tuần·SPDV·Nghiệp vụ·SL·Giá trị) → web này. Mọi trang &amp; bộ lọc Ngày/Tháng/Năm đọc chung L2.</p></div><div class="note" style="margin-top:12px">Bản demo dùng số nhúng (Tháng thật · Ngày mẫu). Bước tiếp: dựng L2_TONGHOP trong Sheet → publish CSV → nối realtime.</div>`;return;}
+ if(id==="SRC"){document.getElementById('rtitle').textContent="Nguồn & Cấu hình";document.getElementById('rmeta').innerHTML="Chẩn đoán đọc dữ liệu qua /api/csv";renderSRC();return;}
  render();}
 function startApp(){buildNav();go('TQ');loadLive();setInterval(loadLive,60000);}
 (function(){let a=false;try{a=sessionStorage.getItem('pvh_auth')==='1'}catch(e){}if(a)showApp();})();
