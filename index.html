@@ -159,7 +159,8 @@ const RAZER={bot:234,tay:9};
 
 /* ============ REALTIME: đọc 2 tab TỔNG HỢP an toàn (không nối raw nhạy cảm) ============ */
 const BASE="https://docs.google.com/spreadsheets/d/e/2PACX-1vSve6XRHg5gWRzqkazHm5zvlrkTkAMLa7TJms_U-ebAFcrDAmcvCYfNJ50hrvV988tXyKC7q70LQgPc/pub";
-const CSV={ spdv:BASE+"?gid=460836856&single=true&output=csv", ncc:BASE+"?gid=1758921427&single=true&output=csv", fx:BASE+"?gid=163849763&single=true&output=csv" };
+function apiURL(gid){return "/api/csv?gid="+gid;}
+const CSV={ spdv:apiURL("460836856"), ncc:apiURL("1758921427"), fx:apiURL("163849763") };
 let NCC_ALL={};
 let FXMAP={},FXKEYS=[];
 let LIVE=false;
@@ -169,9 +170,7 @@ function num(x){if(x==null)return 0;x=(''+x).replace(/["\s₫đ$%]/g,'');if(x===
  const n=parseFloat(x);return isNaN(n)?0:n;}
 function papaT(url,ms){return new Promise(res=>{let done=false;const to=setTimeout(()=>{if(!done){done=true;res(null);}},ms);
  try{Papa.parse(url,{download:true,complete:r=>{if(done)return;done=true;clearTimeout(to);res(r.data&&r.data.length?r.data:null);},error:()=>{if(done)return;done=true;clearTimeout(to);res(null);}});}catch(e){if(!done){done=true;clearTimeout(to);res(null);}}});}
-async function loadCSV(url){let d=await papaT(url,7000);if(d&&d.length>1)return d;
- d=await papaT("https://corsproxy.io/?url="+encodeURIComponent(url),9000);if(d&&d.length>1)return d;
- d=await papaT("https://api.allorigins.win/raw?url="+encodeURIComponent(url),9000);return d;}
+async function loadCSV(url){return await papaT(url,15000);}
 function fetchCSV(url){return loadCSV(url);}
 const MFULL=["Tháng 01","Tháng 02","Tháng 03","Tháng 04","Tháng 05","Tháng 06","Tháng 07","Tháng 08","Tháng 09","Tháng 10","Tháng 11","Tháng 12"];
 function monIdx(t){t=(''+t).trim();let m=t.match(/th[aá]ng\s*(\d{1,2})/i);if(m)return +m[1]-1;m=t.match(/^(\d{1,2})\/\d{4}$/);if(m)return +m[1]-1;m=t.match(/^T(\d{1,2})$/i);if(m)return +m[1]-1;return -1;}
@@ -448,7 +447,7 @@ const RAWCFG={
 };
 let RAWDATA={},RAWSTATE={};
 function fetchRaw(key){if(RAWDATA[key])return Promise.resolve(RAWDATA[key]);if(RAWSTATE[key])return RAWSTATE[key];
- const cfg=RAWCFG[key];const url=BASE+"?gid="+cfg.gid+"&single=true&output=csv";
+ const cfg=RAWCFG[key];const url=apiURL(cfg.gid);
  RAWSTATE[key]=loadCSV(url).then(rows=>{const recs=[];(rows||[]).forEach(row=>{const dt=parseDateCell(row[cfg.date]);if(!dt||dt.mo<0)return;if(cfg.onlyCol!=null&&(''+(row[cfg.onlyCol]||'')).trim().toLowerCase()!==cfg.onlyVal)return;recs.push({dk:dkey(dt.mo,dt.d),val:num(row[cfg.val]),unit:num(row[cfg.unit]),emp:cfg.emp>=0?(''+(row[cfg.emp]||'')).trim():'',ncc:cfg.ncc>=0?(''+(row[cfg.ncc]||'')).trim():'',cat:cfg.cat>=0?(''+(row[cfg.cat]||'')).trim():''});});RAWDATA[key]=recs;return recs;});
  return RAWSTATE[key];}
 function ensureRaw(keys){return Promise.all(keys.map(fetchRaw));}
