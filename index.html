@@ -195,12 +195,9 @@ function parseNCC(rows){let mrow=-1,col={};
  return {data,col};}
 function applyLive(a,b){let ok=false;
  if(a&&a.length){const P=parseSPDV(a);let hit=false;
-   SPDV.forEach(sp=>{for(let i=0;i<6;i++){const mn="Tháng 0"+(i+1);
-     const v=P.val(P.nhap,sp,mn);if(v)hit=true;NHAP[sp][i]=v;
-     const xl=sp==="Token"?"Item (Token)":sp;XUAT[sp]=XUAT[sp]||[0,0,0,0,0,0];XUAT[sp][i]=P.val(P.xuat,sp,mn)||P.val(P.xuat,xl,mn);
-     if(DIE[sp])DIE[sp][i]=P.thiethai(sp,mn);}});
+   SPDV.forEach(sp=>{for(let i=0;i<6;i++){const mn="Tháng 0"+(i+1);const v=P.val(P.nhap,sp,mn);if(v)hit=true;NHAP[sp][i]=v;const xl=sp==="Token"?"Item (Token)":sp;XUAT[sp]=XUAT[sp]||[0,0,0,0,0,0];XUAT[sp][i]=P.val(P.xuat,sp,mn)||P.val(P.xuat,xl,mn);if(DIE[sp])DIE[sp][i]=P.thiethai(sp,mn);}});
    for(let i=0;i<6;i++)DON.Robux[i]=P.don("Tháng 0"+(i+1));ok=hit;}
- if(b&&b.length){const N=parseNCC(b);const all={};Object.keys(N.data).forEach(sp=>{const arr=N.data[sp].map(row=>{let t=0;for(let i=0;i<6;i++){const c=N.col["Tháng 0"+(i+1)];if(c!=null)t+=num(row[c]);}return[(''+(row[3]||'')).trim(),t];}).filter(x=>x[0]&&x[1]>0).sort((x,y)=>y[1]-x[1]);if(arr.length)all[sp]=arr;});if(Object.keys(all).length){NCC_ALL=all;if(all["Robux"])NCC_ROBUX=all["Robux"].slice(0,10);}}
+ if(b&&b.length){const N=parseNCC(b);const all={};Object.keys(N.data).forEach(sp=>{const arr=N.data[sp].map(row=>{const vals=[];for(let i=0;i<6;i++){const c=N.col["Tháng 0"+(i+1)];vals.push(c!=null?num(row[c]):0);}return[(''+(row[3]||'')).trim(),vals];}).filter(x=>x[0]&&x[1].some(v=>v>0));if(arr.length)all[sp]=arr;});if(Object.keys(all).length){NCC_ALL=all;const rb=all["Robux"];if(rb)NCC_ROBUX=rb.map(x=>[x[0],x[1].reduce((a,b)=>a+b,0)]).sort((a,b)=>b[1]-a[1]).slice(0,10);}}
  return ok;}
 async function loadLive(){
  const [a,b,fx]=await Promise.all([fetchCSV(CSV.spdv),fetchCSV(CSV.ncc),fetchCSV(CSV.fx)]);
@@ -216,8 +213,8 @@ const RED='#f43f5e',GREEN='#34d399';
 Chart.defaults.font.family='Arial';Chart.defaults.font.size=11;Chart.defaults.color='#5b6b7b';
 let charts=[],curr="TQ";
 function today(){const t=new Date();return{y:t.getFullYear(),mo:t.getMonth(),d:t.getDate()};}
-const TD=today();
-let FROM={y:TD.y,mo:TD.mo,d:1},TO={y:TD.y,mo:TD.mo,d:TD.d};
+const TD=today();const _f0=new Date();_f0.setDate(_f0.getDate()-29);
+let FROM={y:_f0.getFullYear(),mo:_f0.getMonth(),d:_f0.getDate()},TO={y:TD.y,mo:TD.mo,d:TD.d};
 
 /* ===== tiện ích ===== */
 const fmt=n=>{if(!n)return"-";const a=Math.abs(n);if(a>=1e9)return(n/1e9).toFixed(2)+" tỷ";if(a>=1e6)return(n/1e6).toFixed(1)+" tr";return Math.round(n).toLocaleString('vi-VN');};
@@ -240,12 +237,12 @@ function factor(){const mm=monthsInRange();let f=0;for(const m in mm){const mi=+
 /* giá trị theo scope từ mảng tháng (SPDV metric) */
 function sval(arr,seed){return aggArr(arr,null,null,seed);}
 function scopeData(){const o={nhap:{},xuat:{},die:{},don:0,totalNhap:0,totalXuat:0,totalDie:0};
- SPDV.forEach(sp=>{const nh=aggArr(NHAP[sp],sp,DAILY.nhap,sp.length*31),xu=aggArr(XUAT[sp],sp,DAILY.xuat,sp.length*17),di=aggArr(DIE[sp],sp,DAILY.die,sp.length*7);o.nhap[sp]=nh;o.xuat[sp]=xu;o.die[sp]=di;o.totalNhap+=nh;o.totalXuat+=xu;o.totalDie+=di;});
- o.don=DAILY._donLoaded?aggArr(null,'Robux',{'Robux':DAILY.don},999):aggArr(DON.Robux,null,null,999);return o;}
+ const touched=Object.keys(monthsInRange()).map(Number);
+ SPDV.forEach(sp=>{let nh=0,xu=0,di=0;touched.forEach(mi=>{nh+=(NHAP[sp]&&NHAP[sp][mi])||0;xu+=(XUAT[sp]&&XUAT[sp][mi])||0;di+=(DIE[sp]&&DIE[sp][mi])||0;});o.nhap[sp]=nh;o.xuat[sp]=xu;o.die[sp]=di;o.totalNhap+=nh;o.totalXuat+=xu;o.totalDie+=di;});
+ let don=0;touched.forEach(mi=>{don+=(DON.Robux[mi])||0;});o.don=don;return o;}
 /* xu hướng theo scope: cả năm→tháng; else→ngày trong tháng */
-function trend(totalFn,seed){const days=rangeDays().filter(x=>x.y===2026);
- if(days.length<=31){const labels=days.map(x=>x.d+'/'+(x.mo+1));const values=days.map(x=>x.mo>5?0:(dayArr(totalFn(x.mo),x.mo,seed)[x.d-1]||0));return{labels,values,hl:-1};}
- const mm=monthsInRange();const labels=[],values=[];Object.keys(mm).map(Number).sort((a,b)=>a-b).forEach(mi=>{labels.push('T'+(mi+1));values.push(Math.round(totalFn(mi)*mm[mi]/DAYS_IN[mi]));});return{labels,values,hl:-1};}
+function trend(totalFn,seed){const touched=Object.keys(monthsInRange()).map(Number).sort((a,b)=>a-b);
+ return {labels:touched.map(mi=>'T'+(mi+1)),values:touched.map(mi=>totalFn(mi)||0),hl:-1};}
 /* so sánh kỳ trước */
 function prevScope(fn){const n=rangeDays().length;const cf=FROM,ct=TO;
  const nt=new Date(cf.y,cf.mo,cf.d);nt.setDate(nt.getDate()-1);const nf=new Date(nt);nf.setDate(nf.getDate()-(n-1));
@@ -302,14 +299,15 @@ const PAGES={
    const trDon=trend(m=>DON.Robux[m],999);
    mk("p1c",{type:'bar',data:{labels:trDon.labels,datasets:[{data:trDon.values,backgroundColor:GREEN,borderRadius:2}]},options:barOpt(false)});
  }},
- PVH2:{title:"PVH2 · NXT theo NCC (phân theo SPDV)",meta:"Tần suất: Tháng",render(host){
-   const f=factor();const src=Object.keys(NCC_ALL).length?NCC_ALL:{"Robux":NCC_ROBUX};
-   const sps=SPDV.filter(s=>src[s]&&src[s].length);
-   host.innerHTML=`<div class="small" style="margin-bottom:10px">Phạm vi ${scopeLabel()} · nguồn: Data theo NCC (live) · ${sps.length} SPDV có NCC</div>
-     <div class="grid2">`+sps.map((sp,idx)=>{const list=src[sp].map(x=>[x[0],x[1]*f]);const tot=list.reduce((a,x)=>a+x[1],0);
-       return `<div class="card"><h3>${sp} — ${list.length} NCC · ${fmt(tot)}</h3><div class="chartbox sm"><canvas id="p2_${idx}"></canvas></div>
-         <div class="scroll" style="max-height:150px;margin-top:8px"><table class="tbl"><tbody>${list.slice(0,8).map(x=>`<tr><td>${x[0]}</td><td class="n">${fmtn(x[1])}</td><td class="n">${pct(x[1]/(tot||1))}</td></tr>`).join('')}</tbody></table></div></div>`;}).join('')+`</div>`;
-   sps.forEach((sp,idx)=>{const list=src[sp].slice(0,8).map(x=>[x[0],x[1]*f]);mk("p2_"+idx,{type:'bar',data:{labels:list.map(x=>x[0]),datasets:[{data:list.map(x=>x[1]),backgroundColor:list.map((_,i)=>i===0?'#0b3a8f':(i<4?'#1e5fd0':'#4aa8f0'))}]},options:hbarOpt()});});
+ PVH2:{title:"PVH2 · NXT theo NCC (phân theo SPDV)",meta:"Nguồn: Data theo NCC (theo tháng)",render(host){
+   const touched=Object.keys(monthsInRange()).map(Number);const src=NCC_ALL;const sps=SPDV.filter(s=>src[s]&&src[s].length);
+   if(!sps.length){host.innerHTML='<div class="note">Chưa tải được Data theo NCC — thử ↻ Làm mới.</div>';return;}
+   let h=`<div class="small" style="margin-bottom:10px">Phạm vi ${scopeLabel()} · CO theo NCC (cộng trọn các tháng chạm khoảng) · ${sps.length} SPDV</div><div class="grid2">`;
+   sps.forEach((sp,idx)=>{const list=src[sp].map(x=>[x[0],touched.reduce((a,mi)=>a+(x[1][mi]||0),0)]).filter(x=>x[1]>0).sort((a,b)=>b[1]-a[1]);const tot=list.reduce((a,x)=>a+x[1],0);
+     h+=`<div class="card"><h3>${sp} — ${list.length} NCC · ${fmt(tot)}</h3><div class="chartbox sm"><canvas id="p2_${idx}"></canvas></div>
+       <div class="scroll" style="max-height:150px;margin-top:8px"><table class="tbl"><tbody>${list.slice(0,8).map(x=>`<tr><td>${x[0]}</td><td class="n">${fmtn(x[1])}</td><td class="n">${pct(x[1]/(tot||1))}</td></tr>`).join('')}</tbody></table></div></div>`;});
+   h+='</div>';host.innerHTML=h;
+   sps.forEach((sp,idx)=>{const list=src[sp].map(x=>[x[0],touched.reduce((a,mi)=>a+(x[1][mi]||0),0)]).filter(x=>x[1]>0).sort((a,b)=>b[1]-a[1]).slice(0,8);mk("p2_"+idx,{type:'bar',data:{labels:list.map(x=>x[0]),datasets:[{data:list.map(x=>x[1]),backgroundColor:list.map((_,i)=>i===0?'#0b3a8f':(i<4?'#1e5fd0':'#4aa8f0'))}]},options:hbarOpt()});});
  }},
  PVH8:{title:"PVH8 · Thất thoát / Gross Loss",meta:"★ BOD · Tháng/Ngày",render(host){
    const sc=scopeData();const gl=sc.totalDie/(sc.totalNhap||1);
@@ -374,7 +372,7 @@ const PAGES={
 };
 
 /* ==== chart cfg helpers ==== */
-function lvl(){return rangeDays().length<=31?"ngày":"tháng";}
+function lvl(){return "tháng";}
 function shortSP(s){return s.replace("Nick Random Roblox","Nick").replace("Razer Gold","Razer").replace("Gift Card","GC");}
 function donut(labels,data,colors,sm){return{type:'doughnut',data:{labels,datasets:[{data,backgroundColor:colors,borderColor:'#fff',borderWidth:1}]},options:{cutout:'56%',plugins:{legend:{position:'right',labels:{boxWidth:10,font:{size:10},padding:4}},tooltip:{callbacks:{label:c=>c.label+': '+fmt(c.parsed)}}}}};}
 function barOpt(stackLegend){return{plugins:{legend:{display:!!stackLegend,position:'top',labels:{boxWidth:10}},tooltip:{callbacks:{label:c=>(c.dataset.label?c.dataset.label+': ':'')+fmt(c.parsed.y)}}},scales:{x:noX,y:{...yG,ticks:{callback:fmt}}}};}
