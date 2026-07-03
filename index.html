@@ -173,7 +173,7 @@ function papaT(url,ms){return new Promise(res=>{let done=false;const to=setTimeo
 async function loadCSV(url){return await papaT(url,15000);}
 function fetchCSV(url){return loadCSV(url);}
 const MFULL=["Tháng 01","Tháng 02","Tháng 03","Tháng 04","Tháng 05","Tháng 06","Tháng 07","Tháng 08","Tháng 09","Tháng 10","Tháng 11","Tháng 12"];
-function monIdx(t){t=(''+t).trim();let m=t.match(/th[aá]ng\s*(\d{1,2})/i);if(m)return +m[1]-1;m=t.match(/^(\d{1,2})\/\d{4}$/);if(m)return +m[1]-1;m=t.match(/^T(\d{1,2})$/i);if(m)return +m[1]-1;return -1;}
+function monIdx(t){t=(''+t).trim();let m=t.match(/th[aá]ng\s*(\d{1,2})/i);if(m)return +m[1]-1;m=t.match(/^(\d{1,2})\/(\d{4})$/);if(m)return +m[1]-1;m=t.match(/^(\d{4})[-\/](\d{1,2})[-\/]\d{1,2}/);if(m)return +m[2]-1;m=t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);if(m)return +m[2]-1;m=t.match(/^T(\d{1,2})$/i);if(m)return +m[1]-1;return -1;}
 function parseSPDV(rows){let mrow=-1,col={};
  for(let r=0;r<rows.length;r++){if((rows[r]||[]).some(x=>monIdx(x)>=0)){mrow=r;break;}}
  if(mrow>=0)rows[mrow].forEach((v,c)=>{const mi=monIdx(v);if(mi>=0&&!(mi in col))col[mi]=c;});
