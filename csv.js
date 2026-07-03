@@ -1,15 +1,16 @@
-// Vercel Serverless Function (CommonJS) — đọc CSV Google Sheet phía server, không dính CORS
+// Vercel Serverless Function (CommonJS) — đọc CSV Google Sheet gốc qua gviz (không cần publish)
+// Yêu cầu: file để chế độ "Bất kỳ ai có đường liên kết → Người xem"
 // Gọi: /api/csv?gid=<gid>
 module.exports = async (req, res) => {
-  const KEY = "2PACX-1vSve6XRHg5gWRzqkazHm5zvlrkTkAMLa7TJms_U-ebAFcrDAmcvCYfNJ50hrvV988tXyKC7q70LQgPc";
+  const SHEET_ID = "1g7a8MLo0DLo37-t3EsLd9js7BcaaIGcI57ufpQfbrlM";
   const ALLOW = new Set([
     "460836856","1758921427","163849763","562469906","61864847",
     "1043029815","1868031300","793401472","1289659560","1711960798"
   ]);
   const gid = String((req.query && req.query.gid) || "");
   if (!ALLOW.has(gid)) { res.status(400).send("gid khong hop le: " + gid); return; }
-  const url = "https://docs.google.com/spreadsheets/d/e/" + KEY +
-              "/pub?gid=" + gid + "&single=true&output=csv";
+  const url = "https://docs.google.com/spreadsheets/d/" + SHEET_ID +
+              "/gviz/tq?tqx=out:csv&gid=" + gid;
   try {
     const r = await fetch(url, { redirect: "follow" });
     const text = await r.text();
