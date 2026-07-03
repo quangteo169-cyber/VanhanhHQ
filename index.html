@@ -167,8 +167,11 @@ function num(x){if(x==null)return 0;x=(''+x).replace(/["\s₫đ$%]/g,'');if(x===
  if(x.indexOf(',')>-1&&x.indexOf('.')===-1){x=x.replace(/\./g,'').replace(',','.');}
  else{if((x.match(/\./g)||[]).length>1)x=x.replace(/\./g,'');x=x.replace(/,/g,'');}
  const n=parseFloat(x);return isNaN(n)?0:n;}
-function papa1(url){return new Promise(res=>{try{Papa.parse(url,{download:true,complete:r=>res(r.data&&r.data.length?r.data:null),error:()=>res(null)});}catch(e){res(null);}});}
-async function loadCSV(url){let d=await papa1(url);if(d&&d.length>1)return d;try{const px="https://api.allorigins.win/raw?url="+encodeURIComponent(url);d=await papa1(px);}catch(e){}return d;}
+function papaT(url,ms){return new Promise(res=>{let done=false;const to=setTimeout(()=>{if(!done){done=true;res(null);}},ms);
+ try{Papa.parse(url,{download:true,complete:r=>{if(done)return;done=true;clearTimeout(to);res(r.data&&r.data.length?r.data:null);},error:()=>{if(done)return;done=true;clearTimeout(to);res(null);}});}catch(e){if(!done){done=true;clearTimeout(to);res(null);}}});}
+async function loadCSV(url){let d=await papaT(url,7000);if(d&&d.length>1)return d;
+ d=await papaT("https://corsproxy.io/?url="+encodeURIComponent(url),9000);if(d&&d.length>1)return d;
+ d=await papaT("https://api.allorigins.win/raw?url="+encodeURIComponent(url),9000);return d;}
 function fetchCSV(url){return loadCSV(url);}
 const MFULL=["Tháng 01","Tháng 02","Tháng 03","Tháng 04","Tháng 05","Tháng 06","Tháng 07","Tháng 08","Tháng 09","Tháng 10","Tháng 11","Tháng 12"];
 function monIdx(t){t=(''+t).trim();let m=t.match(/th[aá]ng\s*(\d{1,2})/i);if(m)return +m[1]-1;m=t.match(/^(\d{1,2})\/\d{4}$/);if(m)return +m[1]-1;m=t.match(/^T(\d{1,2})$/i);if(m)return +m[1]-1;return -1;}
@@ -305,7 +308,11 @@ const PAGES={
  }},
  PVH2:{title:"PVH2 · NXT theo NCC (phân theo SPDV)",meta:"Nguồn: Data theo NCC (theo tháng)",render(host){
    const touched=Object.keys(monthsInRange()).map(Number);const src=NCC_ALL;const sps=SPDV.filter(s=>src[s]&&src[s].length);
-   if(!sps.length){host.innerHTML=spinner("Đang tải Data theo NCC…");if(!window.__nccLoading){window.__nccLoading=1;fetchCSV(CSV.ncc).then(b=>{applyLive(null,b);window.__nccLoading=0;if(curr==='PVH2')render();});}return;}
+   if(!sps.length){
+     if(window.__nccFailed){host.innerHTML='<div class="err">Không tải được Data theo NCC (Google chặn hoặc proxy lỗi/chậm). <button class="btn" style="margin-left:8px" onclick="window.__nccFailed=0;window.__nccLoading=0;render()">↻ Thử lại</button></div>';return;}
+     host.innerHTML=spinner("Đang tải Data theo NCC… (tối đa ~25s)");
+     if(!window.__nccLoading){window.__nccLoading=1;fetchCSV(CSV.ncc).then(b=>{applyLive(null,b);window.__nccLoading=0;window.__nccFailed=!Object.keys(NCC_ALL).length;if(curr==='PVH2')render();});}
+     return;}
    let h=`<div class="small" style="margin-bottom:10px">Phạm vi ${scopeLabel()} · CO theo NCC (cộng trọn tháng chạm khoảng) · ${sps.length} SPDV</div><div class="grid2">`;
    sps.forEach((sp,idx)=>{const list=src[sp].map(x=>[x[0],touched.reduce((a,mi)=>a+(x[1][mi]||0),0)]).filter(x=>x[1]>0).sort((a,b)=>b[1]-a[1]);const tot=list.reduce((a,x)=>a+x[1],0);
      h+=`<div class="card"><h3>${sp} — ${list.length} NCC · ${fmt(tot)}</h3><div class="chartbox sm"><canvas id="p2_${idx}"></canvas></div>
