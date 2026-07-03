@@ -174,12 +174,10 @@ async function loadCSV(url){try{const c=new AbortController();const to=setTimeou
 function fetchCSV(url){return loadCSV(url);}
 const MFULL=["Tháng 01","Tháng 02","Tháng 03","Tháng 04","Tháng 05","Tháng 06","Tháng 07","Tháng 08","Tháng 09","Tháng 10","Tháng 11","Tháng 12"];
 function monIdx(t){t=(''+t).trim();let m=t.match(/th[aá]ng\s*(\d{1,2})/i);if(m)return +m[1]-1;m=t.match(/^(\d{1,2})\/(\d{4})$/);if(m)return +m[1]-1;m=t.match(/^(\d{4})[-\/](\d{1,2})[-\/]\d{1,2}/);if(m)return +m[2]-1;m=t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);if(m)return +m[2]-1;m=t.match(/^T(\d{1,2})$/i);if(m)return +m[1]-1;return -1;}
-function parseSPDV(rows){let mrow=-1,col={};
- for(let r=0;r<rows.length;r++){if((rows[r]||[]).some(x=>monIdx(x)>=0)){mrow=r;break;}}
- if(mrow>=0)rows[mrow].forEach((v,c)=>{const mi=monIdx(v);if(mi>=0&&!(mi in col))col[mi]=c;});
+function parseSPDV(rows){const col={0:5,1:6,2:7,3:8,4:9,5:10};
  const lab=kw=>{for(let r=0;r<rows.length;r++)if((rows[r]||[]).some(x=>(''+x).trim().toLowerCase()===kw.toLowerCase()))return r;return -1;};
  const iN=lab("Tổng CO Nhập"),iX=lab("Tổng CO Xuất"),iT=lab("Thiệt hại");
- const blk=(a,b)=>{const m={};for(let r=a+1;r<(b<0?rows.length:b);r++){const row=rows[r]||[];const L=(''+(row[3]||'')).trim();if(L)m[L]=row;}return m;};
+ const blk=(a,b)=>{const m={};for(let r=a+1;r<(b<0?rows.length:b);r++){const row=rows[r]||[];const L=(''+(row[3]||'')).trim();if(L&&L.toLowerCase()!=='nan')m[L]=row;}return m;};
  const nhap=blk(iN,iX),xuat=blk(iX,iT),th=blk(iT,-1);
  const val=(m,L,mi)=>{const row=m[L];if(!row)return 0;const c=col[mi];return c==null?0:num(row[c]);};
  const K=Object.keys(th);
@@ -191,12 +189,9 @@ function parseSPDV(rows){let mrow=-1,col={};
    if(sp==="RBX")return f(k=>/rbx/i.test(k));return 0;};
  const don=mi=>{const k=K.find(k=>/dồn/i.test(k));return k?val(th,k,mi):0;};
  return {val,nhap,xuat,thiethai,don};}
-function parseNCC(rows){let mrow=-1,col={};
- for(let r=0;r<rows.length;r++){if((rows[r]||[]).some(x=>monIdx(x)>=0)){mrow=r;break;}}
- if(mrow>=0)rows[mrow].forEach((v,c)=>{const mi=monIdx(v);if(mi>=0&&!(mi in col))col[mi]=c;});
- const data={};let cur=null;
- for(let r=mrow+1;r<rows.length;r++){const row=rows[r]||[];const sp=(''+(row[2]||'')).trim(),ncc=(''+(row[3]||'')).trim();
-  if(SPDV.includes(sp)){cur=sp;data[cur]=[];}else if(ncc&&cur&&!/^Tổng/i.test(ncc))data[cur].push(row);}
+function parseNCC(rows){const col={0:5,1:6,2:7,3:8,4:9,5:10};const data={};let cur=null;
+ for(let r=0;r<rows.length;r++){const row=rows[r]||[];const sp=(''+(row[2]||'')).trim(),ncc=(''+(row[3]||'')).trim();
+  if(SPDV.includes(sp)){cur=sp;data[cur]=[];}else if(ncc&&ncc.toLowerCase()!=='nan'&&cur&&!/^Tổng/i.test(ncc)&&!/danh mục/i.test(ncc))data[cur].push(row);}
  return {data,col};}
 function applyLive(a,b){let ok=false;
  if(a&&a.length){const P=parseSPDV(a);let hit=false;
