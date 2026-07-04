@@ -161,8 +161,15 @@ const RAZER={bot:234,tay:9};
 const BASE="https://docs.google.com/spreadsheets/d/e/2PACX-1vSve6XRHg5gWRzqkazHm5zvlrkTkAMLa7TJms_U-ebAFcrDAmcvCYfNJ50hrvV988tXyKC7q70LQgPc/pub";
 function apiURL(gid){return "/api/csv?gid="+gid;}
 function directURL(gid){return BASE+"?gid="+gid+"&single=true&output=csv";}
-/* Đọc TRỰC TIẾP từ Google Sheet (publish CSV); /api/csv trên Vercel chỉ là dự phòng */
-async function fetchGid(gid){const a=await loadCSV(directURL(gid));if(a&&a.length>1)return a;return await loadCSV(apiURL(gid));}
+/* Đọc TRỰC TIẾP từ Google Sheet (publish CSV); /api/csv trên Vercel chỉ là dự phòng.
+   valid(rows) (tuỳ chọn): kiểm tra dữ liệu đọc về có ĐÚNG cấu trúc tab không —
+   chống trường hợp link publish trả nhầm tab / lệch cột nhưng vẫn HTTP 200. */
+async function fetchGid(gid,valid){
+ const a=await loadCSV(directURL(gid));
+ if(a&&a.length>1&&(!valid||valid(a)))return a;
+ const b=await loadCSV(apiURL(gid));
+ if(b&&b.length>1&&(!valid||valid(b)))return b;
+ return (b&&b.length>1)?b:((a&&a.length>1)?a:null);}
 const GIDS={ spdv:"460836856", ncc:"1758921427", fx:"163849763" };
 let NCC_ALL={};
 let FXMAP={},FXKEYS=[];
@@ -177,7 +184,14 @@ async function loadCSV(url){try{const c=new AbortController();const to=setTimeou
 function fetchCSV(url){return loadCSV(url);}
 const MFULL=["Tháng 01","Tháng 02","Tháng 03","Tháng 04","Tháng 05","Tháng 06","Tháng 07","Tháng 08","Tháng 09","Tháng 10","Tháng 11","Tháng 12"];
 function monIdx(t){t=(''+t).trim();let m=t.match(/th[aá]ng\s*(\d{1,2})/i);if(m)return +m[1]-1;m=t.match(/^(\d{1,2})\/(\d{4})$/);if(m)return +m[1]-1;m=t.match(/^(\d{4})[-\/](\d{1,2})[-\/]\d{1,2}/);if(m)return +m[2]-1;m=t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);if(m)return +m[2]-1;m=t.match(/^T(\d{1,2})$/i);if(m)return +m[1]-1;return -1;}
-function parseSPDV(rows){const col={0:5,1:6,2:7,3:8,4:9,5:10};
+/* Tên SPDV chuẩn hoá — chấp nhận biến thể (Token = "Item (Token)") */
+function canonSP(x){x=(''+x).trim();if(SPDV.includes(x))return x;
+ const n=x.toLowerCase().replace(/\s+/g,' ');if(n==='token'||n==='item (token)')return 'Token';return null;}
+/* Dò hàng tiêu đề tháng: hàng nào có >=3 ô là "Tháng 01"/"T01"/"01/2026"… thì lấy map tháng→cột */
+function monthCols(rows){for(let r=0;r<Math.min(rows.length,25);r++){const row=rows[r]||[];const m={};let n=0;
+ for(let c=0;c<row.length;c++){const mi=monIdx(''+row[c]);if(mi>=0&&mi<6&&m[mi]==null){m[mi]=c;n++;}}
+ if(n>=3)return m;}return null;}
+function parseSPDV(rows){const col=monthCols(rows)||{0:5,1:6,2:7,3:8,4:9,5:10};
  const lab=kw=>{for(let r=0;r<rows.length;r++)if((rows[r]||[]).some(x=>(''+x).trim().toLowerCase()===kw.toLowerCase()))return r;return -1;};
  const iN=lab("Tổng CO Nhập"),iX=lab("Tổng CO Xuất"),iT=lab("Thiệt hại");
  const blk=(a,b)=>{const m={};for(let r=a+1;r<(b<0?rows.length:b);r++){const row=rows[r]||[];const L=(''+(row[3]||'')).trim();if(L&&L.toLowerCase()!=='nan')m[L]=row;}return m;};
@@ -199,18 +213,35 @@ function parseSPDV(rows){const col={0:5,1:6,2:7,3:8,4:9,5:10};
    if(sp==="RBX")return f(k=>/rbx/i.test(k));return 0;};
  const don=mi=>{const k=K.find(k=>/dồn/i.test(k));return k?val(th,k,mi):0;};
  return {val,nhap,xuat,thiethai,don};}
-function parseNCC(rows){const col={0:5,1:6,2:7,3:8,4:9,5:10};const data={};let cur=null;
- for(let r=0;r<rows.length;r++){const row=rows[r]||[];const sp=(''+(row[2]||'')).trim(),ncc=(''+(row[3]||'')).trim();
-  if(SPDV.includes(sp)){cur=sp;data[cur]=[];}else if(ncc&&ncc.toLowerCase()!=='nan'&&cur&&!/^Tổng/i.test(ncc)&&!/danh mục/i.test(ncc))data[cur].push(row);}
- return {data,col};}
+function parseNCC(rows){
+ /* Tự dò cấu trúc thay vì cột cố định:
+    - spCol  = cột đầu tiên xuất hiện tên SPDV (mở khối)
+    - nccCol = cột kế bên phải chứa tên NCC
+    - col    = map tháng→cột từ hàng tiêu đề tháng; không thấy thì suy từ spCol */
+ let spCol=-1;
+ for(let r=0;r<rows.length&&spCol<0;r++){const row=rows[r]||[];
+  for(let c=0;c<row.length;c++){if(canonSP(row[c])){spCol=c;break;}}}
+ if(spCol<0)spCol=2;
+ const col=monthCols(rows)||{0:spCol+3,1:spCol+4,2:spCol+5,3:spCol+6,4:spCol+7,5:spCol+8};
+ const nccCol=spCol+1;
+ const data={};let cur=null;
+ for(let r=0;r<rows.length;r++){const row=rows[r]||[];const sp=canonSP(row[spCol]),ncc=(''+(row[nccCol]||'')).trim();
+  if(sp){cur=sp;data[cur]=[];}else if(ncc&&ncc.toLowerCase()!=='nan'&&cur&&!/^Tổng/i.test(ncc)&&!/danh mục/i.test(ncc))data[cur].push(row);}
+ return {data,col,nccCol};}
+/* validator: nguồn đọc về phải parse ra số thật thì mới nhận (không thì thử nguồn kia) */
+const VAL_SPDV=rows=>{try{const P=parseSPDV(rows);return SPDV.some(sp=>{for(let i=0;i<6;i++)if(P.val(P.nhap,sp,i)>0)return true;return false;});}catch(e){return false;}};
+const VAL_NCC=rows=>{try{const N=parseNCC(rows);return Object.keys(N.data).some(sp=>N.data[sp].some(row=>{for(let i=0;i<6;i++)if(num(row[N.col[i]]))return true;return false;}));}catch(e){return false;}};
+const VAL_FX=rows=>rows.some(r=>{const d=parseDateCell((r||[])[1]);return !!d&&num((r||[])[2])>0;});
 function applyLive(a,b){let ok=false;
  if(a&&a.length){const P=parseSPDV(a);let hit=false;
-   SPDV.forEach(sp=>{for(let i=0;i<6;i++){const v=P.val(P.nhap,sp,i);if(v)hit=true;NHAP[sp][i]=v;XUAT[sp]=XUAT[sp]||[0,0,0,0,0,0];XUAT[sp][i]=P.val(P.xuat,sp,i)||P.val(P.xuat,sp==="Token"?"Item (Token)":sp,i);if(DIE[sp])DIE[sp][i]=P.thiethai(sp,i);}});
-   for(let i=0;i<6;i++)DON.Robux[i]=P.don(i);ok=hit;}
- if(b&&b.length){const N=parseNCC(b);const all={};Object.keys(N.data).forEach(sp=>{const arr=N.data[sp].map(row=>{const vals=[];for(let i=0;i<6;i++){const c=N.col[i];vals.push(c!=null?num(row[c]):0);}return[(''+(row[3]||'')).trim(),vals];}).filter(x=>x[0]&&x[1].some(v=>v>0));if(arr.length)all[sp]=arr;});if(Object.keys(all).length){NCC_ALL=all;const rb=all["Robux"];if(rb)NCC_ROBUX=rb.map(x=>[x[0],x[1].reduce((a,b)=>a+b,0)]).sort((a,b)=>b[1]-a[1]).slice(0,10);}}
+   SPDV.forEach(sp=>{for(let i=0;i<6;i++)if(P.val(P.nhap,sp,i)>0)hit=true;});
+   if(hit){/* chỉ ghi đè khi parse ra số thật — tránh xoá số dự phòng bằng 0 */
+     SPDV.forEach(sp=>{for(let i=0;i<6;i++){NHAP[sp][i]=P.val(P.nhap,sp,i);XUAT[sp]=XUAT[sp]||[0,0,0,0,0,0];XUAT[sp][i]=P.val(P.xuat,sp,i);if(DIE[sp])DIE[sp][i]=P.thiethai(sp,i);}});
+     for(let i=0;i<6;i++)DON.Robux[i]=P.don(i);ok=true;}}
+ if(b&&b.length){const N=parseNCC(b);const all={};Object.keys(N.data).forEach(sp=>{const arr=N.data[sp].map(row=>{const vals=[];for(let i=0;i<6;i++){const c=N.col[i];vals.push(c!=null?num(row[c]):0);}return[(''+(row[N.nccCol]||'')).trim(),vals];}).filter(x=>x[0]&&x[1].some(v=>v>0));if(arr.length)all[sp]=arr;});if(Object.keys(all).length){NCC_ALL=all;const rb=all["Robux"];if(rb)NCC_ROBUX=rb.map(x=>[x[0],x[1].reduce((a,b)=>a+b,0)]).sort((a,b)=>b[1]-a[1]).slice(0,10);}}
  return ok;}
 async function loadLive(){
- const [a,b,fx]=await Promise.all([fetchGid(GIDS.spdv),fetchGid(GIDS.ncc),fetchGid(GIDS.fx)]);
+ const [a,b,fx]=await Promise.all([fetchGid(GIDS.spdv,VAL_SPDV),fetchGid(GIDS.ncc,VAL_NCC),fetchGid(GIDS.fx,VAL_FX)]);
  LIVE=applyLive(a,b);if(fx&&fx.length)parseFX(fx);
  const e=document.getElementById('upd');if(e)e.textContent="Cập nhật "+new Date().toLocaleTimeString('vi-VN')+(LIVE?" · LIVE":" · số dự phòng");
  if(curr!=="SRC")render();}
@@ -313,10 +344,17 @@ const PAGES={
  PVH2:{title:"PVH2 · NXT theo NCC (phân theo SPDV)",meta:"Nguồn: Data theo NCC (theo tháng)",render(host){
    const touched=Object.keys(monthsInRange()).map(Number);const src=NCC_ALL;const sps=SPDV.filter(s=>src[s]&&src[s].length);
    if(!sps.length){
-     if(window.__nccFailed){host.innerHTML=`<div class="err"><b>Không đọc được Data theo NCC.</b><br>Chẩn đoán: ${window.__nccDiag||'(chưa có)'}<br><button class="btn" style="margin-top:8px" onclick="window.__nccFailed=0;window.__nccLoading=0;render()">↻ Thử lại</button></div>`;return;}
+     if(window.__nccFailed){
+       const sample=window.__nccRows||[];
+       const prev=sample.length?`<div class="card" style="margin-top:12px"><h3>Dữ liệu thô đọc về (10 dòng đầu × 12 cột) — chụp màn hình gửi lại nếu vẫn lỗi</h3><div class="scroll"><table class="tbl"><thead><tr><th>#</th>${Array.from({length:12},(_,c)=>`<th>${String.fromCharCode(65+c)}</th>`).join('')}</tr></thead><tbody>${sample.slice(0,10).map((r,i)=>`<tr><td>${i+1}</td>${Array.from({length:12},(_,c)=>`<td>${((''+((r||[])[c]??'')).slice(0,18))}</td>`).join('')}</tr>`).join('')}</tbody></table></div></div>`:'';
+       host.innerHTML=`<div class="note"><b>Không đọc được Data theo NCC thành số liệu.</b><br>Chẩn đoán: ${window.__nccDiag||'(chưa có)'}<br>Parser cần: một cột chứa tên SPDV (Robux, Gift Card, Token/Item (Token)…) mở từng khối, cột kế bên là tên NCC, và hàng tiêu đề tháng (Tháng 01 / T01 / 01-2026…).<br><button class="btn" style="margin-top:8px" onclick="window.__nccFailed=0;window.__nccLoading=0;render()">↻ Thử lại</button></div>${prev}`;return;}
      host.innerHTML=spinner("Đang tải Data theo NCC…");
      if(!window.__nccLoading){window.__nccLoading=1;
-       fetchGid('1758921427').then(rows=>{if(rows){window.__nccDiag='đọc được '+rows.length+' dòng';applyLive(null,rows);}else window.__nccDiag='không đọc được — cả link Google trực tiếp lẫn /api/csv';
+       fetchGid('1758921427',VAL_NCC).then(rows=>{
+        if(rows){window.__nccRows=rows.slice(0,10);const N=parseNCC(rows);const nsp=Object.keys(N.data).filter(sp=>N.data[sp].length).length;
+          window.__nccDiag='đọc được '+rows.length+' dòng · nhận diện '+nsp+' khối SPDV · cột tháng: '+(monthCols(rows)?'tự dò được':'dùng mặc định');
+          applyLive(null,rows);}
+        else window.__nccDiag='không đọc được — cả link Google trực tiếp lẫn /api/csv đều lỗi/không đúng cấu trúc';
         window.__nccLoading=0;window.__nccFailed=!Object.keys(NCC_ALL).length;if(curr==='PVH2')render();}).catch(e=>{window.__nccDiag='Lỗi fetch: '+(e&&e.message?e.message:e);window.__nccLoading=0;window.__nccFailed=1;if(curr==='PVH2')render();});}
      return;}
    let h=`<div class="small" style="margin-bottom:10px">Phạm vi ${scopeLabel()} · CO theo NCC (cộng trọn tháng chạm khoảng) · ${sps.length} SPDV</div><div class="grid2">`;
@@ -493,7 +531,9 @@ function buildRobux(rows){const H=hIdx(rows,['NGÀY NHẬP','THÀNH TIỀN']);if
   if(iDon>=0)DAILY.don[k]=(DAILY.don[k]||0)+num(row[iDon]);}
  return true;}
 async function ensureDaily(){if(RAWLOADED.robux!==undefined)return;RAWLOADED.robux='loading';
- const rows=await fetchGid(562469906);RAWLOADED.robux=(rows&&rows.length&&buildRobux(rows))?true:'failed';
+ let rows=await loadCSV(directURL(562469906));let ok=!!(rows&&rows.length&&buildRobux(rows));
+ if(!ok){rows=await loadCSV(apiURL(562469906));ok=!!(rows&&rows.length&&buildRobux(rows));}
+ RAWLOADED.robux=ok?true:'failed';
  if(curr!=="SRC")render();}
 
 
@@ -507,9 +547,14 @@ const RAWCFG={
  /* RBX: gid 1289659560, CO ở cột G (index 6) — tab chưa có số liệu, sẽ nối khi có dữ liệu */
 };
 let RAWDATA={},RAWSTATE={};
+function rowsToRecs(cfg,rows){const recs=[];(rows||[]).forEach(row=>{const dt=parseDateCell(row[cfg.date]);if(!dt||dt.mo<0)return;if(cfg.onlyCol!=null&&(''+(row[cfg.onlyCol]||'')).trim().toLowerCase()!==cfg.onlyVal)return;recs.push({dk:dkey(dt.mo,dt.d),val:num(row[cfg.val]),unit:num(row[cfg.unit]),emp:cfg.emp>=0?(''+(row[cfg.emp]||'')).trim():'',ncc:cfg.ncc>=0?(''+(row[cfg.ncc]||'')).trim():'',cat:cfg.cat>=0?(''+(row[cfg.cat]||'')).trim():''});});return recs;}
 function fetchRaw(key){if(RAWDATA[key])return Promise.resolve(RAWDATA[key]);if(RAWSTATE[key])return RAWSTATE[key];
  const cfg=RAWCFG[key];
- RAWSTATE[key]=fetchGid(cfg.gid).then(rows=>{const recs=[];(rows||[]).forEach(row=>{const dt=parseDateCell(row[cfg.date]);if(!dt||dt.mo<0)return;if(cfg.onlyCol!=null&&(''+(row[cfg.onlyCol]||'')).trim().toLowerCase()!==cfg.onlyVal)return;recs.push({dk:dkey(dt.mo,dt.d),val:num(row[cfg.val]),unit:num(row[cfg.unit]),emp:cfg.emp>=0?(''+(row[cfg.emp]||'')).trim():'',ncc:cfg.ncc>=0?(''+(row[cfg.ncc]||'')).trim():'',cat:cfg.cat>=0?(''+(row[cfg.cat]||'')).trim():''});});RAWDATA[key]=recs;return recs;});
+ /* thử Google trực tiếp; parse không ra bản ghi nào (lệch cột/nhầm tab) thì thử /api/csv */
+ RAWSTATE[key]=(async()=>{
+   let recs=rowsToRecs(cfg,await loadCSV(directURL(cfg.gid)));
+   if(!recs.length)recs=rowsToRecs(cfg,await loadCSV(apiURL(cfg.gid)));
+   RAWDATA[key]=recs;return recs;})();
  return RAWSTATE[key];}
 function ensureRaw(keys){return Promise.all(keys.map(fetchRaw));}
 function recsIn(key){const cfg=RAWCFG[key],fk=iso(FROM),tk=iso(TO);return (RAWDATA[key]||[]).filter(r=>r.dk>=fk&&r.dk<=tk).map(r=>({emp:r.emp,ncc:r.ncc,cat:r.cat,valv:cfg.usd?r.val*fxRate(r.dk):r.val,unitv:cfg.usd?r.unit*fxRate(r.dk):r.unit}));}
@@ -521,20 +566,23 @@ function monthlyAvgUnit(key){const cfg=RAWCFG[key];const sum=[0,0,0,0,0,0],cnt=[
  return sum.map((s,i)=>cnt[i]?Math.round(s/cnt[i]):0);}
 /* PVH9: đơn Bot vs thủ công từ Data Razergold — tự dò cột chứa giá trị Bot/Tay */
 let RAZERRECS;
-async function razerBotRecs(){if(RAZERRECS!==undefined)return RAZERRECS;
- const rows=await fetchGid(RAWCFG.razer.gid);
- if(!rows||rows.length<2){RAZERRECS=null;return null;}
+function botRecsFromRows(rows){
+ if(!rows||rows.length<2)return null;
  const isBot=v=>/^bot/i.test(v),isTay=v=>/^(tay|th[uủ]\s*c[oô]ng|manual)/i.test(v);
  let best=-1,bestHits=0;const width=Math.max(...rows.slice(0,60).map(r=>(r||[]).length),0);
  for(let c=0;c<width;c++){let hits=0,bot=0;
   for(let r=1;r<rows.length;r++){const v=(''+((rows[r]||[])[c]||'')).trim();if(!v)continue;if(isBot(v)){hits++;bot++;}else if(isTay(v))hits++;}
   if(hits>bestHits&&bot>0){bestHits=hits;best=c;}}
- if(best<0){RAZERRECS=null;return null;}
+ if(best<0)return null;
  const recs=[];
  for(let r=1;r<rows.length;r++){const row=rows[r]||[];const dt=parseDateCell(row[RAWCFG.razer.date]);if(!dt||dt.mo<0||dt.mo>5)continue;
   const v=(''+(row[best]||'')).trim();if(!v)continue;
   if(isBot(v))recs.push({dk:dkey(dt.mo,dt.d),bot:1});else if(isTay(v))recs.push({dk:dkey(dt.mo,dt.d),bot:0});}
- RAZERRECS=recs.length?recs:null;return RAZERRECS;}
+ return recs.length?recs:null;}
+async function razerBotRecs(){if(RAZERRECS!==undefined)return RAZERRECS;
+ let recs=botRecsFromRows(await loadCSV(directURL(RAWCFG.razer.gid)));
+ if(!recs)recs=botRecsFromRows(await loadCSV(apiURL(RAWCFG.razer.gid)));
+ RAZERRECS=recs;return RAZERRECS;}
 function spinner(t){return '<div class="center"><div class="spin"></div>'+t+'</div>';}
 
 /* ===== ROUTER ===== */
