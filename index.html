@@ -214,23 +214,33 @@ function parseSPDV(rows){const col=monthCols(rows)||{0:5,1:6,2:7,3:8,4:9,5:10};
  const don=mi=>{const k=K.find(k=>/dồn/i.test(k));return k?val(th,k,mi):0;};
  return {val,nhap,xuat,thiethai,don};}
 function parseNCC(rows){
- /* Tự dò cấu trúc thay vì cột cố định:
-    - spCol  = cột đầu tiên xuất hiện tên SPDV (mở khối)
-    - nccCol = cột kế bên phải chứa tên NCC
-    - col    = map tháng→cột từ hàng tiêu đề tháng; không thấy thì suy từ spCol */
- let spCol=-1;
- for(let r=0;r<rows.length&&spCol<0;r++){const row=rows[r]||[];
-  for(let c=0;c<row.length;c++){if(canonSP(row[c])){spCol=c;break;}}}
+ /* Cấu trúc thật của tab (DATA MONTHLY - PCU):
+    - hàng tiêu đề tháng dạng 01/2026, 02/2026… (cột E là tổng năm — bỏ qua)
+    - tab chia khu: "Tổng CO Nhập" / "Tổng CO Xuất"… — chỉ lấy khu CO Nhập
+    - tên SPDV mở khối và tên NCC nằm CÙNG một cột; cột kế bên chỉ là cột phụ
+    - spCol = cột chứa NHIỀU tên SPDV nhất trên toàn tab (tránh dính ô lạc ở góc sheet) */
+ const cnt={};
+ for(let r=0;r<rows.length;r++){const row=rows[r]||[];for(let c=0;c<row.length;c++)if(canonSP(row[c]))cnt[c]=(cnt[c]||0)+1;}
+ let spCol=-1,bestN=0;Object.keys(cnt).forEach(c=>{if(cnt[c]>bestN){bestN=cnt[c];spCol=+c;}});
  if(spCol<0)spCol=2;
  const col=monthCols(rows)||{0:spCol+3,1:spCol+4,2:spCol+5,3:spCol+6,4:spCol+7,5:spCol+8};
- const nccCol=spCol+1;
- const data={};let cur=null;
- for(let r=0;r<rows.length;r++){const row=rows[r]||[];const sp=canonSP(row[spCol]),ncc=(''+(row[nccCol]||'')).trim();
-  if(sp){cur=sp;data[cur]=[];}else if(ncc&&ncc.toLowerCase()!=='nan'&&cur&&!/^Tổng/i.test(ncc)&&!/danh mục/i.test(ncc))data[cur].push(row);}
- return {data,col,nccCol};}
+ const reNhap=/tổng\s*co\s*nhập/i,reXuat=/tổng\s*co\s*xuất/i,reTh=/thiệt\s*hại/i;
+ let hasSec=false;
+ for(let r=0;r<rows.length&&!hasSec;r++){if((rows[r]||[]).some(x=>reNhap.test(''+x)))hasSec=true;}
+ const data={};let cur=null,sec=hasSec?null:'nhap';
+ for(let r=0;r<rows.length;r++){const row=rows[r]||[];
+  if(row.some(x=>reNhap.test(''+x))){sec='nhap';cur=null;continue;}
+  if(row.some(x=>reXuat.test(''+x))){sec='xuat';cur=null;continue;}
+  if(row.some(x=>reTh.test(''+x))){sec='th';cur=null;continue;}
+  const sp=canonSP(row[spCol]);
+  if(sp){cur=(sec==='nhap')?sp:null;if(cur&&!data[cur])data[cur]=[];continue;}
+  if(!cur)continue;
+  let ncc=(''+(row[spCol]||'')).trim();if(!ncc)ncc=(''+(row[spCol+1]||'')).trim();
+  if(ncc&&ncc.toLowerCase()!=='nan'&&!/^tổng/i.test(ncc)&&!/danh mục/i.test(ncc))data[cur].push({name:ncc,row});}
+ return {data,col,spCol};}
 /* validator: nguồn đọc về phải parse ra số thật thì mới nhận (không thì thử nguồn kia) */
 const VAL_SPDV=rows=>{try{const P=parseSPDV(rows);return SPDV.some(sp=>{for(let i=0;i<6;i++)if(P.val(P.nhap,sp,i)>0)return true;return false;});}catch(e){return false;}};
-const VAL_NCC=rows=>{try{const N=parseNCC(rows);return Object.keys(N.data).some(sp=>N.data[sp].some(row=>{for(let i=0;i<6;i++)if(num(row[N.col[i]]))return true;return false;}));}catch(e){return false;}};
+const VAL_NCC=rows=>{try{const N=parseNCC(rows);return Object.keys(N.data).some(sp=>N.data[sp].some(it=>{for(let i=0;i<6;i++)if(num(it.row[N.col[i]]))return true;return false;}));}catch(e){return false;}};
 const VAL_FX=rows=>rows.some(r=>{const d=parseDateCell((r||[])[1]);return !!d&&num((r||[])[2])>0;});
 function applyLive(a,b){let ok=false;
  if(a&&a.length){const P=parseSPDV(a);let hit=false;
@@ -238,7 +248,7 @@ function applyLive(a,b){let ok=false;
    if(hit){/* chỉ ghi đè khi parse ra số thật — tránh xoá số dự phòng bằng 0 */
      SPDV.forEach(sp=>{for(let i=0;i<6;i++){NHAP[sp][i]=P.val(P.nhap,sp,i);XUAT[sp]=XUAT[sp]||[0,0,0,0,0,0];XUAT[sp][i]=P.val(P.xuat,sp,i);if(DIE[sp])DIE[sp][i]=P.thiethai(sp,i);}});
      for(let i=0;i<6;i++)DON.Robux[i]=P.don(i);ok=true;}}
- if(b&&b.length){const N=parseNCC(b);const all={};Object.keys(N.data).forEach(sp=>{const arr=N.data[sp].map(row=>{const vals=[];for(let i=0;i<6;i++){const c=N.col[i];vals.push(c!=null?num(row[c]):0);}return[(''+(row[N.nccCol]||'')).trim(),vals];}).filter(x=>x[0]&&x[1].some(v=>v>0));if(arr.length)all[sp]=arr;});if(Object.keys(all).length){NCC_ALL=all;const rb=all["Robux"];if(rb)NCC_ROBUX=rb.map(x=>[x[0],x[1].reduce((a,b)=>a+b,0)]).sort((a,b)=>b[1]-a[1]).slice(0,10);}}
+ if(b&&b.length){const N=parseNCC(b);const all={};Object.keys(N.data).forEach(sp=>{const arr=N.data[sp].map(it=>{const vals=[];for(let i=0;i<6;i++){const c=N.col[i];vals.push(c!=null?num(it.row[c]):0);}return[it.name,vals];}).filter(x=>x[0]&&x[1].some(v=>v>0));if(arr.length)all[sp]=arr;});if(Object.keys(all).length){NCC_ALL=all;const rb=all["Robux"];if(rb)NCC_ROBUX=rb.map(x=>[x[0],x[1].reduce((a,b)=>a+b,0)]).sort((a,b)=>b[1]-a[1]).slice(0,10);}}
  return ok;}
 async function loadLive(){
  const [a,b,fx]=await Promise.all([fetchGid(GIDS.spdv,VAL_SPDV),fetchGid(GIDS.ncc,VAL_NCC),fetchGid(GIDS.fx,VAL_FX)]);
