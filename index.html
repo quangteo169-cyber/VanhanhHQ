@@ -429,12 +429,32 @@ const PAGES={
    mk("p10a",donut(['Success','Refund'],[su,re],[GREEN,RED],true));
    mk("p10b",donut(['API (auto)','WEB (tay)'],[api,web],['#0b3a8f','#7cc4f7'],true));
  }},
- PVH12:{title:"PVH12 · Báo cáo Hoàn (nick/đơn)",meta:"Nguồn: DATA BÁN (Nick)",render(host){
-   const f=factor();const tot=Math.round(NICK_ST.reduce((a,x)=>a+x[1],0)*f);const die=Math.round(637*f),hoan=Math.round(124*f);
-   host.innerHTML=`<div class="ok">Nguồn thật: DATA BÁN (Data Nick Roblox), co theo phạm vi ${scopeLabel()}.</div>
-    <div class="kpis" style="margin-top:12px">${kpi("Nick DIE",fmtn(die),pct(die/(tot||1)))}${kpi("Nick hoàn tiền",fmtn(hoan),pct(hoan/(tot||1)))}${kpi("Tổng nick",fmtn(tot),scopeLabel())}${kpi("Tỷ lệ DIE",pct(die/(tot||1)),"die/tổng")}</div>
-    <div class="grid2">${cc("Cơ cấu trạng thái nick","p12a")}<div class="card"><h3>Bảng trạng thái</h3><div class="scroll"><table class="tbl"><thead><tr><th>Trạng thái</th><th class="n">SL</th><th class="n">%</th></tr></thead><tbody>${NICK_ST.map(x=>{const v=Math.round(x[1]*f);return `<tr><td>${x[0]}</td><td class="n">${fmtn(v)}</td><td class="n">${pct(v/(tot||1))}</td></tr>`}).join('')}</tbody></table></div></div></div>`;
-   mk("p12a",donut(NICK_ST.map(x=>x[0]),NICK_ST.map(x=>Math.round(x[1]*f)),BLUE));
+ PVH12:{title:"PVH12 · Báo cáo Hoàn (nick/đơn)",meta:"Nguồn: Data Nick Roblox (realtime)",render(host){
+   host.innerHTML=spinner("Đang đọc trạng thái nick từ Data Nick Roblox…");
+   nickStatusRecs().then(recs=>{
+     if(!recs){const f=factor();const tot=Math.round(NICK_ST.reduce((a,x)=>a+x[1],0)*f);const die=Math.round(637*f),hoan=Math.round(124*f);
+       host.innerHTML=`<div class="note">Chưa nhận diện được cột trạng thái trong Data Nick Roblox — đang hiển thị <b>số dự phòng</b> co theo phạm vi ${scopeLabel()}.</div>
+        <div class="kpis" style="margin-top:12px">${kpi("Nick DIE",fmtn(die),pct(die/(tot||1)))}${kpi("Nick hoàn tiền",fmtn(hoan),pct(hoan/(tot||1)))}${kpi("Tổng nick",fmtn(tot),scopeLabel())}${kpi("Tỷ lệ DIE",pct(die/(tot||1)),"die/tổng")}</div>
+        <div class="grid2">${cc("Cơ cấu trạng thái nick","p12a")}<div class="card"><h3>Bảng trạng thái</h3><div class="scroll"><table class="tbl"><thead><tr><th>Trạng thái</th><th class="n">SL</th><th class="n">%</th></tr></thead><tbody>${NICK_ST.map(x=>{const v=Math.round(x[1]*f);return `<tr><td>${x[0]}</td><td class="n">${fmtn(v)}</td><td class="n">${pct(v/(tot||1))}</td></tr>`}).join('')}</tbody></table></div></div></div>`;
+       mk("p12a",donut(NICK_ST.map(x=>x[0]),NICK_ST.map(x=>Math.round(x[1]*f)),BLUE));return;}
+     const fk=iso(FROM),tk=iso(TO);
+     const dated=recs.filter(r=>r.dk);
+     const useAll=dated.length<recs.length*0.3; /* tab thiếu ngày → hiển thị toàn bộ */
+     const inScope=useAll?recs:dated.filter(r=>r.dk>=fk&&r.dk<=tk);
+     const cnt={};inScope.forEach(r=>{cnt[r.st]=(cnt[r.st]||0)+1;});
+     const list=Object.entries(cnt).sort((a,b)=>b[1]-a[1]);
+     const tot=inScope.length;
+     const die=cnt['DIE']||0;
+     const hoan=Object.keys(cnt).filter(k=>/HOÀN TIỀN/i.test(k)).reduce((a,k)=>a+cnt[k],0);
+     const dieM=Array(12).fill(0),hoanM=Array(12).fill(0);
+     dated.forEach(r=>{const mo=+r.dk.slice(5,7)-1;if(mo<0||mo>11)return;if(r.st==='DIE')dieM[mo]++;else if(/HOÀN TIỀN/i.test(r.st))hoanM[mo]++;});
+     host.innerHTML=`<div class="ok">Nguồn thật: Data Nick Roblox — đếm nick theo cột trạng thái${useAll?' · tab thiếu cột ngày nên hiển thị TOÀN BỘ (không lọc phạm vi)':' trong phạm vi '+scopeLabel()}.</div>
+      <div class="kpis" style="margin-top:12px">${kpi("Nick DIE",fmtn(die),pct(die/(tot||1)))}${kpi("Nick hoàn tiền",fmtn(hoan),pct(hoan/(tot||1)))}${kpi("Tổng nick",fmtn(tot),useAll?"toàn bộ dữ liệu":scopeLabel())}${kpi("Tỷ lệ DIE",pct(die/(tot||1)),"die/tổng")}</div>
+      ${tot?`<div class="grid2">${cc("Cơ cấu trạng thái nick","p12a")}<div class="card"><h3>Bảng trạng thái</h3><div class="scroll" style="max-height:240px"><table class="tbl"><thead><tr><th>Trạng thái</th><th class="n">SL</th><th class="n">%</th></tr></thead><tbody>${list.map(x=>`<tr><td>${x[0]}</td><td class="n">${fmtn(x[1])}</td><td class="n">${pct(x[1]/(tot||1))}</td></tr>`).join('')}</tbody></table></div></div></div>${cc("DIE & Hoàn tiền theo tháng (cả kỳ)","p12b")}`:'<div class="note" style="margin-top:12px">Không có nick nào trong phạm vi lọc — thử bấm "Cả kỳ".</div>'}
+      <div class="note" style="margin-top:12px">Chưa gồm "loại lỗi" &amp; "chi phí hoàn" — cần chỉ cột tương ứng trong tab để bổ sung.</div>`;
+     if(tot){mk("p12a",donut(list.slice(0,8).map(x=>x[0]),list.slice(0,8).map(x=>x[1]),BLUE));
+       mk("p12b",{type:'bar',data:{labels:MN,datasets:[{label:'DIE',data:dieM,backgroundColor:RED},{label:'Hoàn tiền',data:hoanM,backgroundColor:'#fbbf24'}]},options:barOpt(true)});}
+   });
  }},
  PVH4:{title:"PVH4 · Biến động giá vốn theo tháng",meta:"Giá vốn = đơn giá bình quân các lô nhập trong tháng (VND)",render(host){
    host.innerHTML=spinner("Đang tải giá vốn theo tháng (Robux · Nick · Gift Card · Razer)…");
@@ -597,6 +617,25 @@ async function razerBotRecs(){if(RAZERRECS!==undefined)return RAZERRECS;
  let recs=botRecsFromRows(await loadCSV(directURL(RAWCFG.razer.gid)));
  if(!recs)recs=botRecsFromRows(await loadCSV(apiURL(RAWCFG.razer.gid)));
  RAZERRECS=recs;return RAZERRECS;}
+/* PVH12: trạng thái nick từ Data Nick Roblox — tự dò cột trạng thái theo các nhãn quen thuộc */
+let NICKST;
+function nickStatusFromRows(rows){
+ if(!rows||rows.length<2)return null;
+ const known=/^(ho[àa]n th[àa]nh|die|đ[ãa] ho[àa]n ti[èề]n|ch[uư]a b[áa]n|đ[ãa] x[uử] l[ýy])$/i;
+ let best=-1,hits=0;const width=Math.max(...rows.slice(0,80).map(r=>(r||[]).length),0);
+ for(let c=0;c<width;c++){let h=0;
+  for(let r=1;r<rows.length;r++){const v=(''+((rows[r]||[])[c]||'')).trim();if(v&&known.test(v))h++;}
+  if(h>hits){hits=h;best=c;}}
+ if(best<0||!hits)return null;
+ const recs=[];
+ for(let r=1;r<rows.length;r++){const row=rows[r]||[];const st=(''+(row[best]||'')).trim();if(!st)continue;
+  const dt=parseDateCell(row[RAWCFG.nick.date]);
+  recs.push({dk:(dt&&dt.mo>=0&&dt.mo<12)?dkey(dt.mo,dt.d):null,st:st.toUpperCase()});}
+ return recs.length?recs:null;}
+async function nickStatusRecs(){if(NICKST!==undefined)return NICKST;
+ let recs=nickStatusFromRows(await loadCSV(directURL(RAWCFG.nick.gid)));
+ if(!recs)recs=nickStatusFromRows(await loadCSV(apiURL(RAWCFG.nick.gid)));
+ NICKST=recs;return NICKST;}
 function spinner(t){return '<div class="center"><div class="spin"></div>'+t+'</div>';}
 
 /* ===== ROUTER ===== */
