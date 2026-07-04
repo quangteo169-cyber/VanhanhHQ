@@ -35,12 +35,16 @@ vercel        # deploy preview
 vercel --prod # deploy production
 ```
 
-## Bước sau — nối dữ liệu thật realtime (L2_TONGHOP)
-Bản hiện tại là **giao diện + số demo** (tháng thật · ngày mẫu). Để chạy realtime:
-1. Dựng sheet **L2_TONGHOP** trong Google Sheet (cấp Ngày, long-format:
-   `Ngày · Năm · Tháng · Tuần_ISO · SPDV · Nghiệp_vụ · Số_lượng · Giá_trị`).
-2. Publish sheet đó ra CSV.
-3. Dán link vào biến `CSV_L2` (khối cấu hình đầu thẻ `<script>` trong `index.html`) —
-   khi có link, web tự đọc live thay cho số nhúng.
+## Nguồn dữ liệu realtime
+Web đọc **trực tiếp Google Sheet** qua link Publish-to-web CSV (`BASE?gid=…&output=csv`);
+nếu link trực tiếp lỗi mới rơi về hàm dự phòng `/api/csv` trên Vercel.
+Yêu cầu: file Google Sheet giữ chế độ **Publish to web** (Tệp ▸ Chia sẻ ▸ Xuất bản lên web).
 
-> Bảo mật: chỉ publish sheet L2 tổng hợp (không chứa tài khoản/mã code). Không publish các tab raw.
+Tình trạng nối dữ liệu:
+- Chạy dữ liệu thật: Tổng quan, PVH1, PVH2, PVH3, PVH4, PVH5, PVH8, PVH9 (đơn Bot từ Data Razergold), PVH11.
+- Số dự phòng khi không đọc được sheet: toàn bộ tự rơi về bộ số nhúng trong `index.html`.
+- Chưa dựng (chờ chốt nguồn/nghiệp vụ): PVH6 (tồn & tuổi tồn), PVH7 (đối soát), PVH10 (SLA chi tiết).
+- RBX: tab gid `1289659560` (CO ở cột G) sẽ nối khi có số liệu.
+
+Kiểm tra nhanh: mở trang **Nguồn & Cấu hình** trong sidebar — bảng chẩn đoán test từng tab
+theo cả 2 đường (Google trực tiếp / api dự phòng).
