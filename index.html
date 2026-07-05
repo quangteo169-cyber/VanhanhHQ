@@ -377,10 +377,16 @@ const PAGES={
         window.__nccLoading=0;window.__nccFailed=!Object.keys(NCC_ALL).length;if(curr==='PVH2')render();}).catch(e=>{window.__nccDiag='Lỗi fetch: '+(e&&e.message?e.message:e);window.__nccLoading=0;window.__nccFailed=1;if(curr==='PVH2')render();});}
      return;}
    const tmn=touched.slice().sort((a,b)=>a-b);
-   let h=`<div class="small" style="margin-bottom:10px">Phạm vi ${scopeLabel()} · CO theo NCC (cộng trọn tháng chạm khoảng: ${tmn.map(m=>'T'+(m+1)).join('+')}) · ${sps.length} SPDV · bấm <b>Cả kỳ</b> để khớp cột "2026"</div><div class="grid2">`;
+   /* gom số một lần: dùng cho cả ô KPI tổng ở trên lẫn card chi tiết ở dưới */
+   const agg={};
+   sps.forEach(sp=>{const list=src[sp].map(x=>[x[0],tmn.reduce((a,mi)=>a+(x[1][mi]||0),0),x[1]]).filter(x=>x[1]>0).sort((a,b)=>b[1]-a[1]);
+     agg[sp]={list,tot:list.reduce((a,x)=>a+x[1],0)};});
+   let h=`<div class="small" style="margin-bottom:10px">Phạm vi ${scopeLabel()} · CO theo NCC (cộng trọn tháng chạm khoảng: ${tmn.map(m=>'T'+(m+1)).join('+')}) · ${sps.length} SPDV · bấm <b>Cả kỳ</b> để khớp cột "2026"</div>`;
+   h+=`<div class="kpis">${sps.map(sp=>kpi('Tổng CO Nhập · '+sp,fmt(agg[sp].tot),agg[sp].list.length+' NCC · top: '+(agg[sp].list[0]?agg[sp].list[0][0]:'—'))).join('')}</div>`;
+   h+='<div class="grid2">';
    sps.forEach((sp,idx)=>{
-     const list=src[sp].map(x=>[x[0],tmn.reduce((a,mi)=>a+(x[1][mi]||0),0),x[1]]).filter(x=>x[1]>0).sort((a,b)=>b[1]-a[1]);
-     const tot=list.reduce((a,x)=>a+x[1],0);
+     const list=agg[sp].list;
+     const tot=agg[sp].tot;
      const sheetT=NCC_TOT[sp]?tmn.reduce((a,mi)=>a+(NCC_TOT[sp][mi]||0),0):null;
      const diff=sheetT!=null?tot-sheetT:null;
      /* 3 mức đối soát: khớp tuyệt đối (xanh) · lệch nhỏ ≤0.1% (vàng) · lệch lớn (đỏ — hàng tổng của khối có thể không phải tổng cộng NCC) */
@@ -399,7 +405,7 @@ const PAGES={
        ${sheetT!=null?`<tr style="font-weight:bold;color:#0b3a8f;background:#eef4ff"><td>Hàng tổng trên sheet</td>${tmn.map(mi=>`<td class="n">${fmtn(NCC_TOT[sp][mi])}</td>`).join('')}<td class="n">${fmtn(sheetT)}</td><td class="n">—</td></tr>`:''}
        </tbody></table></div></div>`;});
    h+='</div>';host.innerHTML=h;
-   sps.forEach((sp,idx)=>{const list=src[sp].map(x=>[x[0],tmn.reduce((a,mi)=>a+(x[1][mi]||0),0)]).filter(x=>x[1]>0).sort((a,b)=>b[1]-a[1]).slice(0,10);mk("p2_"+idx,{type:'bar',data:{labels:list.map(x=>x[0]),datasets:[{data:list.map(x=>x[1]),backgroundColor:list.map((_,i)=>i===0?'#0b3a8f':(i<4?'#1e5fd0':'#4aa8f0'))}]},options:hbarOpt()});});
+   sps.forEach((sp,idx)=>{const list=agg[sp].list.slice(0,10);mk("p2_"+idx,{type:'bar',data:{labels:list.map(x=>x[0]),datasets:[{data:list.map(x=>x[1]),backgroundColor:list.map((_,i)=>i===0?'#0b3a8f':(i<4?'#1e5fd0':'#4aa8f0'))}]},options:hbarOpt()});});
  }},
  PVH8:{title:"PVH8 · Thất thoát / Gross Loss",meta:"★ BOD · Tháng/Ngày",render(host){
    const sc=scopeData();const gl=sc.totalDie/(sc.totalNhap||1);
