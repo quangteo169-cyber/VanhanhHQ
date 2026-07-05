@@ -376,7 +376,7 @@ const PAGES={
         window.__nccLoading=0;window.__nccFailed=!Object.keys(NCC_ALL).length;if(curr==='PVH2')render();}).catch(e=>{window.__nccDiag='Lỗi fetch: '+(e&&e.message?e.message:e);window.__nccLoading=0;window.__nccFailed=1;if(curr==='PVH2')render();});}
      return;}
    const tmn=touched.slice().sort((a,b)=>a-b);
-   let h=`<div class="small" style="margin-bottom:10px">Phạm vi ${scopeLabel()} — PVH2 tính THEO THÁNG: cộng trọn các tháng chạm khoảng lọc (${tmn.map(m=>'T'+(m+1)).join(' + ')}). Muốn khớp cột tổng "2026" trên sheet, bấm nút <b>Cả kỳ</b>.</div><div class="grid2">`;
+   let h=`<div class="small" style="margin-bottom:10px">Phạm vi ${scopeLabel()} · CO theo NCC (cộng trọn tháng chạm khoảng: ${tmn.map(m=>'T'+(m+1)).join('+')}) · ${sps.length} SPDV · bấm <b>Cả kỳ</b> để khớp cột "2026"</div><div class="grid2">`;
    sps.forEach((sp,idx)=>{
      const list=src[sp].map(x=>[x[0],tmn.reduce((a,mi)=>a+(x[1][mi]||0),0),x[1]]).filter(x=>x[1]>0).sort((a,b)=>b[1]-a[1]);
      const tot=list.reduce((a,x)=>a+x[1],0);
