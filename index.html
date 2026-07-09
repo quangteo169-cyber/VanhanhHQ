@@ -181,8 +181,10 @@ let NCC_TOT={}; /* hàng tổng từng khối SPDV trên sheet — dùng đối 
 let FXMAP={},FXKEYS=[];
 let LIVE=false;
 function num(x){if(x==null)return 0;x=(''+x).replace(/["\s₫đ$%]/g,'');if(x===''||x==='-')return 0;
- if(x.indexOf(',')>-1&&x.indexOf('.')===-1){x=x.replace(/\./g,'').replace(',','.');}
- else{if((x.match(/\./g)||[]).length>1)x=x.replace(/\./g,'');x=x.replace(/,/g,'');}
+ if(x.indexOf(',')>-1&&x.indexOf('.')===-1){x=x.replace(',','.');} /* chỉ phẩy = thập phân (locale VN: 934738215,5) */
+ else if(x.indexOf(',')>-1){ /* có cả hai: dấu đứng SAU CÙNG là thập phân (1.234.567,89 vs 1,234,567.89) */
+  if(x.lastIndexOf(',')>x.lastIndexOf('.'))x=x.replace(/\./g,'').replace(',','.');else x=x.replace(/,/g,'');}
+ else if((x.match(/\./g)||[]).length>1||/^-?\d{1,3}(\.\d{3})+$/.test(x))x=x.replace(/\./g,''); /* chấm = ngăn nghìn VN, kể cả MỘT nhóm: 238.330 → 238330 (trước đây đọc nhầm thành 238,33) */
  const n=parseFloat(x);return isNaN(n)?0:n;}
 function papaT(url,ms){return new Promise(res=>{let done=false;const to=setTimeout(()=>{if(!done){done=true;res(null);}},ms);
  try{Papa.parse(url,{download:true,complete:r=>{if(done)return;done=true;clearTimeout(to);res(r.data&&r.data.length?r.data:null);},error:()=>{if(done)return;done=true;clearTimeout(to);res(null);}});}catch(e){if(!done){done=true;clearTimeout(to);res(null);}}});}
@@ -221,9 +223,13 @@ function parseSPDV(rows){const col=monthCols(rows)||{0:5,1:6,2:7,3:8,4:9,5:10,6:
    if(sp==="Razer Gold")return f(k=>/razer/i.test(k));
    if(sp==="RBX Daily")return f(k=>/rbx/i.test(k)&&/daily/i.test(k))||f(k=>/rbx/i.test(k)&&!/hqs/i.test(k)); /* chưa tách die → tạm nhận hàng RBX chung */
    if(sp==="RBX HQS")return f(k=>/rbx/i.test(k)&&/hqs/i.test(k));return 0;};
- const don=mi=>{const k=K.find(k=>/dồn/i.test(k));return k?val(th,k,mi):0;};
- /* hàng "Tổng CO Tồn" (hiện ở hàng 42) — tìm theo nhãn để sheet có chèn/xoá hàng vẫn đọc đúng */
- const iTon=(()=>{for(let r=0;r<rows.length;r++)if((rows[r]||[]).some(x=>/co\s*tồn/i.test(''+x)))return r;return -1;})();
+ /* "Robux dồn" nằm ở khu Dồn (GIỮA CO Xuất và Thiệt hại trên sheet) — dò toàn tab, không phụ thuộc khối */
+ const iDon=(()=>{let sec=-1;for(let r=0;r<rows.length;r++){const row=rows[r]||[];
+   if(row.some(x=>/robux\s*dồn/i.test(''+x)))return r;
+   if(sec<0&&row.some(x=>(''+x).trim().toLowerCase()==='dồn'))sec=r;}return sec;})();
+ const don=mi=>{if(iDon<0)return 0;const c=col[mi];return c==null?0:num((rows[iDon]||[])[c]);};
+ /* hàng "Tổng CO Tồn" (hàng 42) — dò theo nhãn, chấp nhận cả "TÒN"/"TỒN"/"TON" (sheet đang ghi TÒN) */
+ const iTon=(()=>{for(let r=0;r<rows.length;r++)if((rows[r]||[]).some(x=>/co\s*t[ồòôo]n/i.test(''+x)))return r;return -1;})();
  const ton=mi=>{if(iTon<0)return 0;const c=col[mi];return c==null?0:num((rows[iTon]||[])[c]);};
  return {val,nhap,xuat,thiethai,don,ton};}
 function parseNCC(rows){
@@ -310,10 +316,8 @@ function scopeData(){const o={nhap:{},xuat:{},die:{},don:0,totalNhap:0,totalXuat
  const touched=Object.keys(monthsInRange()).map(Number).sort((a,b)=>a-b);
  SPDV.forEach(sp=>{let nh=0,xu=0,di=0;touched.forEach(mi=>{nh+=(NHAP[sp]&&NHAP[sp][mi])||0;xu+=(XUAT[sp]&&XUAT[sp][mi])||0;di+=(DIE[sp]&&DIE[sp][mi])||0;});o.nhap[sp]=nh;o.xuat[sp]=xu;o.die[sp]=di;o.totalNhap+=nh;o.totalXuat+=xu;o.totalDie+=di;});
  let don=0;touched.forEach(mi=>{don+=(DON.Robux[mi])||0;});o.don=don;
- /* Tồn là số dư cuối tháng (snapshot) — lấy số của THÁNG CUỐI có dữ liệu trong phạm vi, không cộng dồn */
- let ton=0,tonM=-1;touched.forEach(mi=>{if(TON[mi]){ton=TON[mi];tonM=mi;}});
- if(tonM<0&&touched.length)tonM=touched[touched.length-1];
- o.ton=ton;o.tonM=tonM;return o;}
+ /* Tồn: theo đúng công thức sheet (cột "2026" = TỔNG CỘNG các tháng) — cộng các tháng trong phạm vi */
+ let ton=0;touched.forEach(mi=>{ton+=TON[mi]||0;});o.ton=ton;return o;}
 /* xu hướng theo scope: cả năm→tháng; else→ngày trong tháng */
 function trend(totalFn,seed){const touched=Object.keys(monthsInRange()).map(Number).sort((a,b)=>a-b);
  return {labels:touched.map(mi=>'T'+(mi+1)),values:touched.map(mi=>totalFn(mi)||0),hl:-1};}
@@ -354,7 +358,7 @@ const PAGES={
      ${kpi("Tổng CO Xuất",fmt(sc.totalXuat),"trong phạm vi lọc")}
      ${kpi("Robux Dồn (thu hồi)",fmt(sc.don),"tái sử dụng")}
      ${kpi("Thiệt hại (die/lỗi)",fmt(sc.totalDie),"Gross Loss "+pct(sc.totalDie/(sc.totalNhap||1)))}
-     ${kpi("Tổng CO Tồn",sc.ton?fmt(sc.ton):"—",sc.ton?("tồn cuối kỳ · T"+pad2(sc.tonM+1)):"sheet chưa có số / chưa LIVE")}</div>
+     ${kpi("Tổng CO Tồn",sc.ton?fmt(sc.ton):"—",sc.ton?"cộng các tháng trong phạm vi":"sheet chưa có số / chưa LIVE")}</div>
     <div class="grid2" style="grid-template-columns:1fr 1fr">${cc("Tổng CO Nhập theo SPDV — theo tháng","tq1")}${cc("Tổng CO Xuất theo SPDV — theo tháng","tq2")}</div>
     <div class="grid2" style="grid-template-columns:1fr 1.4fr">${cc("Tỉ trọng CO Nhập theo SPDV — "+scopeLabel(),"tq3")}${cc("Thiệt hại theo SPDV — theo tháng","tq4")}</div>`;
    mk("tq1",stackCfg(lbl,dss(NHAP)));
