@@ -152,6 +152,7 @@ let NHAP={"Robux":[2680000000,1234329434,1383904463,952103845,1097973356,5503295
 let XUAT={"Robux":[2600000000,1200000000,1350000000,940000000,1080182179,520000000],"Token":[34039650,16751710,33309990,12030908,8341155,0],"Gift Card":[3253787550,1700000000,2400000000,3200000000,3310651170,1900000000],"Nick Random Roblox":[90940500,110000000,60000000,60000000,79372688,96864842],"Razer Gold":[0,0,600000000,870000000,889391070,190000000],"RBX":[23748390,40000000,50000000,55000000,61872660,29643570],"Topup":[0,0,0,0,0,0]};
 let DIE={"Robux":[13121425,18638474,1522295,3998836,2205367,1008150],"Nick Random Roblox":[530000,700000,300000,250000,167000,774630],"Razer Gold":[0,0,1500000,2000000,2693790,182250],"Gift Card":[3331800,2000000,1500000,1000000,532980,400000],"RBX":[0,0,1000000,1200000,1677240,1620000]};
 let DON={"Robux":[0,0,5000000,8000000,14858825,10360599]};
+let TON=Array(12).fill(0); /* Tổng CO Tồn theo tháng — đọc hàng "Tổng CO Tồn" trên tab Data theo SPDV, không có số dự phòng */
 /* số nhúng dự phòng chỉ có 6 tháng đầu — đệm đủ 12 tháng để đọc số live cả năm */
 function pad12(o){Object.keys(o).forEach(k=>{const a=o[k];while(a.length<12)a.push(0);});}
 pad12(NHAP);pad12(XUAT);pad12(DIE);pad12(DON);
@@ -217,7 +218,10 @@ function parseSPDV(rows){const col=monthCols(rows)||{0:5,1:6,2:7,3:8,4:9,5:10,6:
    if(sp==="Razer Gold")return f(k=>/razer/i.test(k));
    if(sp==="RBX")return f(k=>/rbx/i.test(k));return 0;};
  const don=mi=>{const k=K.find(k=>/dồn/i.test(k));return k?val(th,k,mi):0;};
- return {val,nhap,xuat,thiethai,don};}
+ /* hàng "Tổng CO Tồn" (hiện ở hàng 42) — tìm theo nhãn để sheet có chèn/xoá hàng vẫn đọc đúng */
+ const iTon=(()=>{for(let r=0;r<rows.length;r++)if((rows[r]||[]).some(x=>/co\s*tồn/i.test(''+x)))return r;return -1;})();
+ const ton=mi=>{if(iTon<0)return 0;const c=col[mi];return c==null?0:num((rows[iTon]||[])[c]);};
+ return {val,nhap,xuat,thiethai,don,ton};}
 function parseNCC(rows){
  /* Cấu trúc thật của tab (DATA MONTHLY - PCU):
     - hàng tiêu đề tháng dạng 01/2026, 02/2026… (cột E là tổng năm — bỏ qua)
@@ -253,7 +257,7 @@ function applyLive(a,b){let ok=false;
    SPDV.forEach(sp=>{for(let i=0;i<12;i++)if(P.val(P.nhap,sp,i)>0)hit=true;});
    if(hit){/* chỉ ghi đè khi parse ra số thật — tránh xoá số dự phòng bằng 0 */
      SPDV.forEach(sp=>{for(let i=0;i<12;i++){NHAP[sp][i]=P.val(P.nhap,sp,i);XUAT[sp]=XUAT[sp]||Array(12).fill(0);XUAT[sp][i]=P.val(P.xuat,sp,i);if(DIE[sp])DIE[sp][i]=P.thiethai(sp,i);}});
-     for(let i=0;i<12;i++)DON.Robux[i]=P.don(i);ok=true;}}
+     for(let i=0;i<12;i++){DON.Robux[i]=P.don(i);TON[i]=P.ton(i);}ok=true;}}
  if(b&&b.length){const N=parseNCC(b);const all={};Object.keys(N.data).forEach(sp=>{const arr=N.data[sp].map(it=>{const vals=[];for(let i=0;i<12;i++){const c=N.col[i];vals.push(c!=null?num(it.row[c]):0);}return[it.name,vals];}).filter(x=>x[0]&&x[1].some(v=>v>0));if(arr.length)all[sp]=arr;});
    if(Object.keys(all).length){NCC_ALL=all;
      const tots={};Object.keys(N.hdr||{}).forEach(sp=>{const vals=[];for(let i=0;i<12;i++){const c=N.col[i];vals.push(c!=null?num(N.hdr[sp][c]):0);}if(vals.some(v=>v>0))tots[sp]=vals;});NCC_TOT=tots;
@@ -273,8 +277,9 @@ const RED='#f43f5e',GREEN='#34d399';
 Chart.defaults.font.family='Arial';Chart.defaults.font.size=11;Chart.defaults.color='#5b6b7b';
 let charts=[],curr="TQ";
 function today(){const t=new Date();return{y:t.getFullYear(),mo:t.getMonth(),d:t.getDate()};}
-const TD=today();const _f0=new Date();_f0.setDate(_f0.getDate()-29);
-let FROM={y:_f0.getFullYear(),mo:_f0.getMonth(),d:_f0.getDate()},TO={y:TD.y,mo:TD.mo,d:TD.d};
+const TD=today();
+/* mặc định mở trang: CẢ NĂM (01/01 → hôm nay) — trang Tổng quan cần cái nhìn tổng năm & so sánh tháng */
+let FROM={y:TD.y,mo:0,d:1},TO={y:TD.y,mo:TD.mo,d:TD.d};
 
 /* ===== tiện ích ===== */
 const fmtAxis=n=>{if(!n)return"0";const a=Math.abs(n);if(a>=1e9)return(n/1e9).toFixed(1)+"tỷ";if(a>=1e6)return(n/1e6).toFixed(0)+"tr";if(a>=1e3)return(n/1e3).toFixed(0)+"k";return ''+Math.round(n);};
@@ -298,9 +303,13 @@ function factor(){const mm=monthsInRange();let f=0;for(const m in mm){const mi=+
 /* giá trị theo scope từ mảng tháng (SPDV metric) */
 function sval(arr,seed){return aggArr(arr,null,null,seed);}
 function scopeData(){const o={nhap:{},xuat:{},die:{},don:0,totalNhap:0,totalXuat:0,totalDie:0};
- const touched=Object.keys(monthsInRange()).map(Number);
+ const touched=Object.keys(monthsInRange()).map(Number).sort((a,b)=>a-b);
  SPDV.forEach(sp=>{let nh=0,xu=0,di=0;touched.forEach(mi=>{nh+=(NHAP[sp]&&NHAP[sp][mi])||0;xu+=(XUAT[sp]&&XUAT[sp][mi])||0;di+=(DIE[sp]&&DIE[sp][mi])||0;});o.nhap[sp]=nh;o.xuat[sp]=xu;o.die[sp]=di;o.totalNhap+=nh;o.totalXuat+=xu;o.totalDie+=di;});
- let don=0;touched.forEach(mi=>{don+=(DON.Robux[mi])||0;});o.don=don;return o;}
+ let don=0;touched.forEach(mi=>{don+=(DON.Robux[mi])||0;});o.don=don;
+ /* Tồn là số dư cuối tháng (snapshot) — lấy số của THÁNG CUỐI có dữ liệu trong phạm vi, không cộng dồn */
+ let ton=0,tonM=-1;touched.forEach(mi=>{if(TON[mi]){ton=TON[mi];tonM=mi;}});
+ if(tonM<0&&touched.length)tonM=touched[touched.length-1];
+ o.ton=ton;o.tonM=tonM;return o;}
 /* xu hướng theo scope: cả năm→tháng; else→ngày trong tháng */
 function trend(totalFn,seed){const touched=Object.keys(monthsInRange()).map(Number).sort((a,b)=>a-b);
  return {labels:touched.map(mi=>'T'+(mi+1)),values:touched.map(mi=>totalFn(mi)||0),hl:-1};}
@@ -329,20 +338,25 @@ function render(){destroy();const host=document.getElementById('content');const 
  R.render(host);}
 
 const PAGES={
- TQ:{title:"Tổng quan vận hành",meta:"Nhập/Xuất/Thiệt hại toàn SPDV (trừ Topup)",render(host){
-   const ST=SPDV.filter(x=>x!=='Topup');
+ TQ:{title:"Tổng quan vận hành",meta:"Nguồn: Data theo SPDV — Nhập · Xuất · Thiệt hại · Dồn · Tồn theo tháng",render(host){
    const sc=scopeData();const prev=prevScope(scopeData);const mom=prev&&prev.totalNhap?sc.totalNhap/prev.totalNhap-1:0;
-   host.innerHTML=`<div class="kpis">
-     ${kpi("Tổng CO Nhập",fmt(sc.totalNhap),prev?`<span class="${cls(mom)}">${arrow(mom)}kỳ trước ${pct(mom)}</span>`:'—')}
-     ${kpi("CO Robux",fmt(sc.nhap["Robux"]),"gamepass")}
+   const tmn=Object.keys(monthsInRange()).map(Number).sort((a,b)=>a-b);
+   const lbl=tmn.map(mi=>'T'+pad2(mi+1));
+   /* chỉ đưa vào biểu đồ các SPDV có phát sinh trong phạm vi (Topup=0 tự ẩn) */
+   const ST=SPDV.filter(s=>tmn.some(mi=>((NHAP[s]&&NHAP[s][mi])||0)>0||((XUAT[s]&&XUAT[s][mi])||0)>0||((DIE[s]&&DIE[s][mi])||0)>0));
+   const dss=SRC=>ST.filter(s=>SRC[s]).map(s=>({label:shortSP(s),data:tmn.map(mi=>SRC[s][mi]||0),backgroundColor:SPCOL[s],stack:'s'}));
+   host.innerHTML=`<div class="kpis" style="grid-template-columns:repeat(5,1fr)">
+     ${kpi("Tổng CO Nhập",fmt(sc.totalNhap),prev&&prev.totalNhap?`<span class="${cls(mom)}">${arrow(mom)}kỳ trước ${pct(mom)}</span>`:scopeLabel())}
+     ${kpi("Tổng CO Xuất",fmt(sc.totalXuat),"trong phạm vi lọc")}
+     ${kpi("Robux Dồn (thu hồi)",fmt(sc.don),"tái sử dụng")}
      ${kpi("Thiệt hại (die/lỗi)",fmt(sc.totalDie),"Gross Loss "+pct(sc.totalDie/(sc.totalNhap||1)))}
-     ${kpi("Robux Dồn (thu hồi)",fmt(sc.don),"tái sử dụng")}</div>
-    <div class="grid3">${cc("Tỉ trọng CO Nhập theo SPDV","tq1")}${cc("CO Nhập theo thời gian","tq2")}${cc("Nhập vs Xuất theo SPDV","tq3")}</div>
-    ${cc("Thiệt hại theo SPDV","tq4")}`;
-   mk("tq1",donut(ST,ST.map(s=>sc.nhap[s]),ST.map(s=>SPCOL[s])));
-   mk("tq2",trendCfg(trend(monthNhap,7)));
-   mk("tq3",{type:'bar',data:{labels:ST.map(shortSP),datasets:[{label:'Nhập',data:ST.map(s=>sc.nhap[s]),backgroundColor:'#1e5fd0'},{label:'Xuất',data:ST.map(s=>sc.xuat[s]),backgroundColor:'#7cc4f7'}]},options:barOpt(true)});
-   mk("tq4",{type:'bar',data:{labels:ST.map(shortSP),datasets:[{data:ST.map(s=>sc.die[s]),backgroundColor:RED}]},options:hbarOpt()});
+     ${kpi("Tổng CO Tồn",sc.ton?fmt(sc.ton):"—",sc.ton?("tồn cuối kỳ · T"+pad2(sc.tonM+1)):"sheet chưa có số / chưa LIVE")}</div>
+    <div class="grid2" style="grid-template-columns:1fr 1fr">${cc("Tổng CO Nhập theo SPDV — theo tháng","tq1")}${cc("Tổng CO Xuất theo SPDV — theo tháng","tq2")}</div>
+    <div class="grid2" style="grid-template-columns:1fr 1.4fr">${cc("Tỉ trọng CO Nhập theo SPDV — "+scopeLabel(),"tq3")}${cc("Thiệt hại theo SPDV — theo tháng","tq4")}</div>`;
+   mk("tq1",stackCfg(lbl,dss(NHAP)));
+   mk("tq2",stackCfg(lbl,dss(XUAT)));
+   mk("tq3",donut(ST,ST.map(s=>sc.nhap[s]),ST.map(s=>SPCOL[s])));
+   mk("tq4",stackCfg(lbl,dss(DIE)));
  }},
  PVH1:{title:"PVH1 · Dồn & Die theo SPDV",meta:"Tần suất: Tháng/Tuần/Ngày",render(host){
    const sc=scopeData();const dieT=sc.totalDie;
@@ -547,6 +561,8 @@ function lvl(){return "tháng";}
 function shortSP(s){return s.replace("Nick Random Roblox","Nick").replace("Razer Gold","Razer").replace("Gift Card","GC");}
 function donut(labels,data,colors,sm){return{type:'doughnut',data:{labels,datasets:[{data,backgroundColor:colors,borderColor:'#fff',borderWidth:1}]},options:{cutout:'56%',plugins:{legend:{position:'right',labels:{boxWidth:10,font:{size:10},padding:4}},tooltip:{callbacks:{label:c=>c.label+': '+fmt(c.parsed)}}}}};}
 function barOpt(stackLegend){return{plugins:{legend:{display:!!stackLegend,position:'top',labels:{boxWidth:10}},tooltip:{callbacks:{label:c=>(c.dataset.label?c.dataset.label+': ':'')+fmt(c.parsed.y)}}},scales:{x:noX,y:{...yG,ticks:{callback:fmtAxis}}}};}
+/* cột chồng theo tháng, mỗi SPDV một màu */
+function stackCfg(labels,datasets){return{type:'bar',data:{labels,datasets},options:{plugins:{legend:{display:true,position:'top',labels:{boxWidth:10,font:{size:10}}},tooltip:{callbacks:{label:c=>c.dataset.label+': '+fmt(c.parsed.y)}}},scales:{x:{...noX,stacked:true},y:{...yG,stacked:true,ticks:{callback:fmtAxis}}}}};}
 function hbarOpt(){return{indexAxis:'y',plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>fmt(c.parsed.x)}}},scales:{x:{...yG,ticks:{callback:fmtAxis}},y:noX}};}
 function trendCfg(tr){const isDay=tr.labels.length>8;
  return{type:isDay?'bar':'line',data:{labels:tr.labels,datasets:[{data:tr.values,fill:!isDay,backgroundColor:isDay?tr.labels.map((_,i)=>i===tr.hl?'#0b3a8f':'#2e86e6'):'rgba(37,99,235,.16)',borderColor:'#1e5fd0',borderWidth:2,tension:.35,pointRadius:3,borderRadius:isDay?2:0}]},
