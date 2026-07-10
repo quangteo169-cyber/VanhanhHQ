@@ -596,16 +596,40 @@ const PAGES={
         scales:{x:noX,y:{...yG},y2:{position:'right',grid:{display:false},ticks:{callback:v=>v+'%'}}}}});});
    });
  }},
- PVH5:{title:"PVH5 · Biến động giá vốn theo NCC (mỗi SPDV 1 mục)",meta:"Nguồn raw: Robux · Nick · Gift Card",render(host){
-   host.innerHTML=spinner("Đang tải giá vốn theo NCC (Robux · Nick · Gift Card)…");
-   ensureRaw(['robux','nick','gc']).then(()=>{
-     const M={robux:'Robux',nick:'Nick Random Roblox',gc:'Gift Card'};const KS=['robux','nick','gc'];
-     let h=`<div class="small" style="margin-bottom:10px">Phạm vi ${scopeLabel()} · giá vốn = đơn giá bình quân theo NCC (VND)</div><div class="grid2">`;
-     KS.forEach((key,idx)=>{const list=groupAvgUnit(key,'ncc');
-       h+=`<div class="card"><h3>${M[key]} — ${list.length} NCC</h3><div class="chartbox sm"><canvas id="p5_${idx}"></canvas></div>
-         <div class="scroll" style="max-height:150px;margin-top:8px"><table class="tbl"><thead><tr><th>NCC</th><th class="n">Giá vốn BQ</th></tr></thead><tbody>${list.slice(0,10).map(x=>`<tr><td>${x[0]}</td><td class="n">${fmtn(x[1])}</td></tr>`).join('')}</tbody></table></div></div>`;});
-     h+='</div>';host.innerHTML=h;
-     KS.forEach((key,idx)=>{const list=groupAvgUnit(key,'ncc').slice(0,10);mk("p5_"+idx,{type:'bar',data:{labels:list.map(x=>x[0]),datasets:[{data:list.map(x=>x[1]),backgroundColor:'#2e86e6'}]},options:hbarOpt()});});
+ PVH5:{title:"PVH5 · Biến động giá vốn theo NCC — Gift Card (SKU × NCC)",meta:"Ô = giá bình quân gia quyền ($) của SKU tại NCC trong khoảng lọc · chọn 1 ngày / 1 tuần / 1 tháng bằng Từ–Đến hoặc preset · ô xanh = NCC rẻ nhất",render(host){
+   host.innerHTML=spinner("Đang đọc Data giftcard và dựng ma trận giá SKU × NCC…");
+   priceRecs('gc').then(R=>{
+     if(!R){const sample=PRICED['gc_rows']||[];
+       const prev=sample.length?`<div class="card" style="margin-top:12px"><h3>Dữ liệu thô đọc về (10 dòng đầu × 17 cột) — chụp màn hình gửi lại nếu vẫn lỗi</h3><div class="scroll"><table class="tbl"><thead><tr><th>#</th>${Array.from({length:17},(_,c)=>`<th>${String.fromCharCode(65+c)}</th>`).join('')}</tr></thead><tbody>${sample.map((r,i)=>`<tr><td>${i+1}</td>${Array.from({length:17},(_,c)=>`<td>${((''+((r||[])[c]??'')).slice(0,15))}</td>`).join('')}</tr>`).join('')}</tbody></table></div></div>`:'';
+       host.innerHTML=`<div class="note"><b>Không đọc được Data giftcard</b> (gid 1043029815)${sample.length?' — đọc được dữ liệu nhưng không dò ra cột (Ngày · Danh mục/SKU · NCC · Đơn giá)':' — không tải được CSV (kiểm tra Publish to web / trang Nguồn &amp; Cấu hình)'}.<br><button class="btn" style="margin-top:8px" onclick="PRICED.gc=undefined;render()">↻ Thử lại</button></div>${prev}`;return;}
+     const fk=iso(FROM),tk=iso(TO);
+     const inS=R.filter(r=>r.dk>=fk&&r.dk<=tk);
+     if(!inS.length){host.innerHTML=`<div class="note">Không có lô nhập Gift Card nào trong phạm vi ${scopeLabel()} — thử nới khoảng lọc hoặc bấm <b>Cả kỳ</b>.</div>`;return;}
+     const skus={},nccTot={};
+     inS.forEach(r=>{const s=skus[r.sku]=skus[r.sku]||{};const c=s[r.ncc]=s[r.ncc]||{v:0,w:0};c.v+=r.gia*r.sl;c.w+=r.sl;nccTot[r.ncc]=(nccTot[r.ncc]||0)+r.gia*r.sl;});
+     const nccs=Object.keys(nccTot).sort((a,b)=>nccTot[b]-nccTot[a]);
+     const rowsD=Object.keys(skus).map(sku=>{const m=skus[sku];const cells={};let mn=Infinity,mx=-Infinity,best='';
+       nccs.forEach(n=>{if(m[n]){const p=m[n].v/m[n].w;cells[n]=p;if(p<mn){mn=p;best=n;}if(p>mx)mx=p;}});
+       const cnt=Object.keys(cells).length;
+       return {sku,cells,mn,mx,best,cnt,spread:cnt>1?(mx-mn)/mn:0};});
+     /* SKU so được nhiều NCC + chênh giá mạnh lên đầu — phục vụ chọn NCC rẻ nhất */
+     rowsD.sort((a,b)=>((b.cnt>1)-(a.cnt>1))||b.spread-a.spread||a.sku.localeCompare(b.sku));
+     window._p5={rowsD,nccs};
+     const multi=rowsD.filter(r=>r.cnt>1);
+     const top=multi[0];
+     host.innerHTML=`
+      <div class="kpis">
+       ${kpi("SKU có giá trong kỳ",fmt(rowsD.length),scopeLabel())}
+       ${kpi("NCC có hàng",fmt(nccs.length),"cột ma trận, xếp theo giá trị nhập")}
+       ${kpi("SKU so được ≥2 NCC",fmt(multi.length),"có thể chọn NCC rẻ nhất")}
+       ${kpi("Chênh giá mạnh nhất",top?(top.spread*100).toFixed(1)+"%":"—",top?top.sku.slice(0,40):"chưa có SKU nào ≥2 NCC")}
+      </div>
+      <div class="card"><h3>Ma trận giá SKU × NCC — ${scopeLabel()}</h3>
+       <div class="row" style="margin-bottom:8px"><input id="p5q" placeholder="Tìm SKU / danh mục…" style="flex:1;max-width:340px;padding:8px 12px;border:1px solid #c9d6ea;border-radius:8px;font-size:13px" oninput="window._p5q=this.value;renderP5Table()">
+        <span class="small">Ô <span style="background:#dcfce7;color:#166534;padding:1px 7px;border-radius:4px;font-weight:bold">xanh</span> = NCC rẻ nhất của SKU (khi có ≥2 NCC) · Chênh % = (đắt nhất − rẻ nhất) ÷ rẻ nhất</span></div>
+       <div class="scroll" style="max-height:520px" id="p5tb"></div></div>
+      <div class="note" style="margin-top:12px">Topup và các SPDV khác sẽ nối cùng khuôn ma trận này khi chốt nguồn từng loại.</div>`;
+     renderP5Table();
    });
  }},
  PVH6:{title:"PVH6 · Tồn & tuổi tồn",meta:"Tần suất: Tuần",render:h=>frameOnly(h,"Cần nguồn TỒN thống nhất (RBX/Razer/GC có tồn riêng; Robux tồn ở Hub/Daily). Tuổi tồn cần ngày nhập từng đơn vị.")},
@@ -788,6 +812,46 @@ function parseCostTab(rows,cfg){
   if(tien>0){const m=M[dt.mo];m.rows++;m.sl+=sl;m.tien+=tien;}
   else if(sl>0){const m=M[dt.mo];m.donRows++;m.donSl+=sl;} /* dòng tiền 0 (nick dồn/gom) — chỉ đối chiếu, KHÔNG tính GV */}
  return M.some(m=>m.tien>0)?M:null;}
+/* ===== PVH5: ma trận giá SKU × NCC — bình quân gia quyền trong khoảng lọc (Gift Card trước) ===== */
+const PRICECFG={gc:{gid:'1043029815',sp:'Gift Card',cur:'$'}};
+const PRICED={};
+function parsePriceRaw(rows){
+ if(!rows||rows.length<2)return null;
+ const norm=x=>{try{x=(''+x).normalize('NFC');}catch(e){x=''+x;}return x.replace(/\u00A0/g,' ').trim().toLowerCase();};
+ let H=-1,iN=-1,iSku=-1,iNcc=-1,iGia=-1,iSl=-1,iLoai=-1;
+ for(let r=0;r<Math.min(rows.length,30);r++){const row=(rows[r]||[]).map(norm);
+  const d=row.findIndex(x=>/ngày/.test(x));
+  const k=row.findIndex(x=>/danh\s*mục|sku/.test(x));
+  const n=row.findIndex(x=>/^ncc$|nhà\s*cung\s*cấp/.test(x));
+  const g=row.findIndex(x=>/đơn\s*giá/.test(x));
+  if(d>-1&&k>-1&&n>-1&&g>-1){H=r;iN=d;iSku=k;iNcc=n;iGia=g;
+   iSl=row.findIndex(x=>(/số\s*lượng|^sl$/.test(x))&&!/dùng/.test(x));break;}}
+ if(H<0){H=0;iN=13;iSku=8;iNcc=5;iGia=10;iSl=-1;iLoai=3;} /* fallback: chỉ số cột đã verify trước đây */
+ else{/* dò cột "thêm mới code" theo dữ liệu (cột loại giao dịch) */
+  const cnt={};for(let r=H+1;r<Math.min(rows.length,H+400);r++){const row=rows[r]||[];
+   for(let c=0;c<row.length;c++)if(/thêm\s*mới\s*code/i.test(''+row[c]))cnt[c]=(cnt[c]||0)+1;}
+  let best=-1,bn=0;Object.keys(cnt).forEach(c=>{if(cnt[c]>bn){bn=cnt[c];best=+c;}});iLoai=best;}
+ const recs=[];
+ for(let r=H+1;r<rows.length;r++){const row=rows[r];if(!row)continue;
+  if(iLoai>=0&&!/thêm\s*mới\s*code/i.test(''+(row[iLoai]||'')))continue; /* chỉ dòng nhập code mới */
+  const dt=parseDateCell(row[iN]);if(!dt)continue;
+  const sku=(''+(row[iSku]||'')).trim();if(!sku)continue;
+  const ncc=(''+(row[iNcc]||'')).trim();if(!ncc)continue;
+  const gia=num(row[iGia]);if(!(gia>0))continue;
+  const sl=iSl>=0?(num(row[iSl])||1):1;
+  recs.push({dk:dkey(dt.mo,dt.d),sku,ncc,gia,sl});}
+ return recs.length?recs:null;}
+async function priceRecs(key){const cfg=PRICECFG[key];if(PRICED[key]!==undefined)return PRICED[key];
+ let rows=await loadCSV(directURL(cfg.gid));let R=parsePriceRaw(rows);
+ if(!R){const r2=await loadCSV(apiURL(cfg.gid));if(r2)rows=r2;R=parsePriceRaw(r2);}
+ PRICED[key+'_rows']=rows?rows.slice(0,10):null;PRICED[key]=R;return R;}
+function renderP5Table(){const P=window._p5;if(!P)return;const q=(window._p5q||'').toLowerCase();
+ const el=document.getElementById('p5tb');if(!el)return;
+ const rows=P.rowsD.filter(r=>!q||r.sku.toLowerCase().indexOf(q)>-1);
+ const f2=n=>n.toLocaleString('vi-VN',{minimumFractionDigits:2,maximumFractionDigits:2});
+ el.innerHTML=`<table class="tbl"><thead><tr><th style="min-width:230px">SKU / Danh mục</th>${P.nccs.map(n=>`<th class="n">${n}</th>`).join('')}<th class="n">Rẻ nhất</th><th class="n">Chênh %</th></tr></thead><tbody>
+  ${rows.slice(0,400).map(r=>`<tr><td>${r.sku}</td>${P.nccs.map(n=>{const p=r.cells[n];return `<td class="n"${p!=null&&p===r.mn&&r.cnt>1?' style="background:#dcfce7;color:#166534;font-weight:bold"':''}>${p!=null?f2(p)+' $':'—'}</td>`;}).join('')}<td class="n"><b>${r.best}</b></td><td class="n">${r.cnt>1?(r.spread*100).toFixed(1)+'%':'—'}</td></tr>`).join('')}
+ </tbody></table>${rows.length>400?`<div class="small" style="margin-top:6px">Đang hiện 400/${rows.length} SKU — gõ ô tìm kiếm để thu hẹp</div>`:''}`;}
 const COSTD={};
 async function costMonths(key){const cfg=COSTCFG[key];if(COSTD[key]!==undefined)return COSTD[key];
  let rows=await loadCSV(directURL(cfg.gid));let M=parseCostTab(rows,cfg);
