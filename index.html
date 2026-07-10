@@ -277,7 +277,16 @@ function applyLive(a,b){let ok=false;
    if(hit){/* chỉ ghi đè khi parse ra số thật — tránh xoá số dự phòng bằng 0 */
      SPDV.forEach(sp=>{for(let i=0;i<12;i++){NHAP[sp][i]=P.val(P.nhap,sp,i);XUAT[sp]=XUAT[sp]||Array(12).fill(0);XUAT[sp][i]=P.val(P.xuat,sp,i);if(DIE[sp])DIE[sp][i]=P.thiethai(sp,i);}});
      for(let i=0;i<12;i++){DON.Robux[i]=P.don(i);TON[i]=P.ton(i);}ok=true;}}
- if(b&&b.length){const N=parseNCC(b);const all={};Object.keys(N.data).forEach(sp=>{const arr=N.data[sp].map(it=>{const vals=[];for(let i=0;i<12;i++){const c=N.col[i];vals.push(c!=null?num(it.row[c]):0);}return[it.name,vals];}).filter(x=>x[0]&&x[1].some(v=>v>0));if(arr.length)all[sp]=arr;});
+ if(b&&b.length){const N=parseNCC(b);const all={};Object.keys(N.data).forEach(sp=>{
+   /* mỗi NCC một dòng; chỉ gộp khi TRÙNG HỆT tên (không phân biệt hoa thường) —
+      "SEAGM" và "SEAGM API" là 2 NCC khác nhau, không bao giờ bị trộn */
+   const m={},ord=[];
+   N.data[sp].forEach(it=>{const vals=[];for(let i=0;i<12;i++){const c=N.col[i];vals.push(c!=null?num(it.row[c]):0);}
+    if(!it.name||!vals.some(v=>v>0))return;
+    const k=it.name.toLowerCase().replace(/\s+/g,' ');
+    if(!m[k]){m[k]=[it.name,vals.slice()];ord.push(k);}
+    else{for(let i=0;i<12;i++)m[k][1][i]+=vals[i];}});
+   const arr=ord.map(k=>m[k]);if(arr.length)all[sp]=arr;});
    if(Object.keys(all).length){NCC_ALL=all;
      const tots={};Object.keys(N.hdr||{}).forEach(sp=>{const vals=[];for(let i=0;i<12;i++){const c=N.col[i];vals.push(c!=null?num(N.hdr[sp][c]):0);}if(vals.some(v=>v>0))tots[sp]=vals;});NCC_TOT=tots;
      const rb=all["Robux"];if(rb)NCC_ROBUX=rb.map(x=>[x[0],x[1].reduce((a,b)=>a+b,0)]).sort((a,b)=>b[1]-a[1]).slice(0,10);}}
