@@ -188,7 +188,11 @@ function num(x){if(x==null)return 0;x=(''+x).replace(/["\s₫đ$%]/g,'');if(x===
  const n=parseFloat(x);return isNaN(n)?0:n;}
 function papaT(url,ms){return new Promise(res=>{let done=false;const to=setTimeout(()=>{if(!done){done=true;res(null);}},ms);
  try{Papa.parse(url,{download:true,complete:r=>{if(done)return;done=true;clearTimeout(to);res(r.data&&r.data.length?r.data:null);},error:()=>{if(done)return;done=true;clearTimeout(to);res(null);}});}catch(e){if(!done){done=true;clearTimeout(to);res(null);}}});}
-async function loadCSV(url){try{const c=new AbortController();const to=setTimeout(()=>c.abort(),15000);const r=await fetch(url,{signal:c.signal});clearTimeout(to);if(!r.ok)return null;const t=await r.text();const p=Papa.parse(t,{});return (p&&p.data&&p.data.length>1)?p.data:null;}catch(e){return null;}}
+async function loadCSV(url){try{const c=new AbortController();const to=setTimeout(()=>c.abort(),15000);const r=await fetch(url,{signal:c.signal});clearTimeout(to);if(!r.ok)return null;const t=await r.text();
+ /* Google trả trang HTML (đăng nhập/không có quyền) khi gid CHƯA được Publish to web — không phải CSV */
+ const tt=t.trimStart().slice(0,300).toLowerCase();
+ if(tt.startsWith('<')||tt.indexOf('<html')>-1||tt.indexOf('<!doctype')>-1)return null;
+ const p=Papa.parse(t,{});return (p&&p.data&&p.data.length>1)?p.data:null;}catch(e){return null;}}
 function fetchCSV(url){return loadCSV(url);}
 const MFULL=["Tháng 01","Tháng 02","Tháng 03","Tháng 04","Tháng 05","Tháng 06","Tháng 07","Tháng 08","Tháng 09","Tháng 10","Tháng 11","Tháng 12"];
 function monIdx(t){t=(''+t).trim();let m=t.match(/th[aá]ng\s*(\d{1,2})/i);if(m)return +m[1]-1;m=t.match(/^(\d{1,2})\/(\d{4})$/);if(m)return +m[1]-1;m=t.match(/^(\d{4})[-\/](\d{1,2})[-\/]\d{1,2}/);if(m)return +m[2]-1;m=t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);if(m)return +m[2]-1;m=t.match(/^T(\d{1,2})$/i);if(m)return +m[1]-1;return -1;}
@@ -388,7 +392,7 @@ function renderGroupReport(host,cfg){
       if(rows){S.rows=rows.slice(0,10);const N=parseNCC(rows);const nsp=Object.keys(N.data).filter(sp=>N.data[sp].length).length;
         S.diag='đọc được '+rows.length+' dòng · nhận diện '+nsp+' khối SPDV · cột tháng: '+(monthCols(rows)?'tự dò được':'dùng mặc định');
         cfg.apply(rows);}
-      else S.diag='không đọc được — cả link Google trực tiếp lẫn /api/csv đều lỗi/không đúng cấu trúc (gid đang dùng: '+cfg.gid+')';
+      else S.diag='không đọc được — Google trả về trang HTML/lỗi thay vì CSV. Khả năng cao tab CHƯA được đưa vào Publish to web (Tệp ▸ Chia sẻ ▸ Xuất bản lên web ▸ chọn Toàn bộ tài liệu hoặc thêm tab này) · gid đang dùng: '+cfg.gid;
       S.loading=0;S.failed=!Object.keys(cfg.src()).length;if(curr===cfg.page)render();}).catch(e=>{S.diag='Lỗi fetch: '+(e&&e.message?e.message:e);S.loading=0;S.failed=1;if(curr===cfg.page)render();});}
    return;}
  const tmn=Object.keys(monthsInRange()).map(Number).sort((a,b)=>a-b);
