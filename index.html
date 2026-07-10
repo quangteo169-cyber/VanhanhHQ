@@ -548,7 +548,7 @@ const PAGES={
    robuxCostMonths().then(M=>{
      if(!M){const sample=COSTRB_ROWS||[];
        const prev=sample.length?`<div class="card" style="margin-top:12px"><h3>Dữ liệu thô đọc về (10 dòng đầu × 16 cột) — chụp màn hình gửi lại nếu vẫn lỗi</h3><div class="scroll"><table class="tbl"><thead><tr><th>#</th>${Array.from({length:16},(_,c)=>`<th>${String.fromCharCode(65+c)}</th>`).join('')}</tr></thead><tbody>${sample.map((r,i)=>`<tr><td>${i+1}</td>${Array.from({length:16},(_,c)=>`<td>${((''+((r||[])[c]??'')).slice(0,16))}</td>`).join('')}</tr>`).join('')}</tbody></table></div></div>`:'';
-       host.innerHTML=`<div class="note"><b>Không đọc được Data Robux</b> (gid 562469906)${sample.length?' — đọc được dữ liệu nhưng không dò ra hàng tiêu đề':' — không tải được CSV (kiểm tra Publish to web / trang Nguồn &amp; Cấu hình)'}.<br>Cần hàng tiêu đề có: cột chứa "Số lượng robux", cột "Thành tiền" (không phải "…dùng"/"…dồn &amp; Die"), và một cột "Ngày…".<br><button class="btn" style="margin-top:8px" onclick="COSTRB=undefined;COSTRB_ROWS=null;render()">↻ Thử lại</button></div>${prev}`;return;}
+       host.innerHTML=`<div class="note"><b>Không đọc được Data Robux</b> (gid ${GID_RBCOST})${sample.length?' — đọc được dữ liệu nhưng không dò ra hàng tiêu đề':' — không tải được CSV (kiểm tra Publish to web / trang Nguồn &amp; Cấu hình)'}.<br>Cần hàng tiêu đề có: cột chứa "Số lượng robux", cột "Thành tiền" (không phải "…dùng"/"…dồn &amp; Die"), và một cột "Ngày…".<br><button class="btn" style="margin-top:8px" onclick="COSTRB=undefined;COSTRB_ROWS=null;render()">↻ Thử lại</button></div>${prev}`;return;}
      const fmt2=n=>n.toLocaleString('vi-VN',{minimumFractionDigits:2,maximumFractionDigits:2});
      const ms=M.map((m,i)=>({mi:i,rows:m.rows,sl:m.sl,tien:m.tien,donSl:m.donSl,gv:m.sl>0?m.tien/m.sl:0})).filter(m=>m.tien>0);
      const totT=ms.reduce((a,m)=>a+m.tien,0),totS=ms.reduce((a,m)=>a+m.sl,0),bq=totS?totT/totS:0;
@@ -770,10 +770,11 @@ function parseRobuxCost(rows){
   if(tien>0){const m=M[dt.mo];m.rows++;m.sl+=sl;m.tien+=tien;}
   else if(sl>0){const m=M[dt.mo];m.donRows++;m.donSl+=sl;} /* nick dồn/gom — chỉ để đối chiếu, KHÔNG tính GV */}
  return M.some(m=>m.tien>0)?M:null;}
+const GID_RBCOST='386815906'; /* tab Data Robux dùng cho giá vốn PVH4 */
 let COSTRB,COSTRB_ROWS=null;
 async function robuxCostMonths(){if(COSTRB!==undefined)return COSTRB;
- let rows=await loadCSV(directURL(562469906));let M=parseRobuxCost(rows);
- if(!M){const r2=await loadCSV(apiURL(562469906));if(r2)rows=r2;M=parseRobuxCost(r2);}
+ let rows=await loadCSV(directURL(GID_RBCOST));let M=parseRobuxCost(rows);
+ if(!M){const r2=await loadCSV(apiURL(GID_RBCOST));if(r2)rows=r2;M=parseRobuxCost(r2);}
  COSTRB_ROWS=rows?rows.slice(0,10):null; /* giữ 10 dòng đầu để chẩn đoán khi không dò được cột */
  COSTRB=M;return COSTRB;}
 function spinner(t){return '<div class="center"><div class="spin"></div>'+t+'</div>';}
@@ -784,7 +785,7 @@ function buildNav(){let h='';TIERS.forEach(([t,label,ids])=>{h+=`<div class="tie
  ids.forEach(k=>{h+=`<div class="nav" data-id="${k}" onclick="go('${k}')"><span class="code">${k}</span><span class="dot" style="color:#2e86e6;background:#2e86e6"></span><span>${PAGES[k].title.split('· ')[1]}</span></div>`;});});
  document.getElementById('nav').innerHTML=h;}
 function renderSRC(){const host=document.getElementById('content');
- const tests=[['Data theo SPDV','460836856'],['Data theo NCC','1758921427'],['Data Nhập Theo Nhân viên',GIDS.nv],['Bảng tỉ giá','163849763'],['Data Robux','562469906'],['Data giftcard','1043029815'],['Data Razergold','1868031300'],['Data OGGAMING','793401472'],['Data Nick Roblox','61864847']];
+ const tests=[['Data theo SPDV','460836856'],['Data theo NCC','1758921427'],['Data Nhập Theo Nhân viên',GIDS.nv],['Bảng tỉ giá','163849763'],['Data Robux (cũ)','562469906'],['Data Robux — giá vốn PVH4','386815906'],['Data giftcard','1043029815'],['Data Razergold','1868031300'],['Data OGGAMING','793401472'],['Data Nick Roblox','61864847']];
  host.innerHTML='<div class="card"><h3 style="text-align:left">Chẩn đoán nguồn dữ liệu — ưu tiên đọc TRỰC TIẾP Google Sheet, /api/csv là dự phòng</h3><div class="scroll"><table class="tbl" id="diag"><thead><tr><th>Tab</th><th>Google trực tiếp</th><th>/api/csv (dự phòng)</th><th class="n">Số dòng</th><th>Dòng đầu / lỗi</th></tr></thead><tbody></tbody></table></div><div class="small" style="margin-top:8px">Cần ít nhất 1 cột xanh cho mỗi tab. "Google trực tiếp" lỗi = tab chưa được Publish to web hoặc bị chặn CORS; "/api/csv" 404 = function Vercel chưa deploy.</div></div>';
  const tb=document.querySelector('#diag tbody');
  const probe=async url=>{try{const c=new AbortController();const to=setTimeout(()=>c.abort(),15000);const r=await fetch(url,{signal:c.signal});clearTimeout(to);const t=await r.text();const rows=t.split(/\r?\n/).filter(x=>x.length);return{ok:r.ok&&rows.length>1,code:r.status,n:rows.length,head:(rows[0]||'(rỗng)').slice(0,60)};}catch(e){return{ok:false,code:'ERR',n:0,head:e&&e.message?e.message:''+e};}};
