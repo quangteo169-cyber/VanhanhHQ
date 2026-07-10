@@ -254,7 +254,7 @@ function parseNCC(rows){
  const okName=n=>!!(n&&n.toLowerCase()!=='nan'&&!/^tổng/i.test(n)&&!/danh mục/i.test(n)&&!/^%/.test(n));
  let hasSec=false;
  for(let r=0;r<rows.length&&!hasSec;r++){if((rows[r]||[]).some(x=>reNhap.test(''+x)))hasSec=true;}
- const data={},hdr={};let cur=null,sec=hasSec?null:'nhap';
+ const data={},hdr={};let cur=null,sec=hasSec?null:'nhap',lastPre='';
  for(let r=0;r<rows.length;r++){const row=rows[r]||[];
   if(row.some(x=>reNhap.test(''+x))){sec='nhap';cur=null;continue;}
   if(row.some(x=>reXuat.test(''+x))){sec='xuat';cur=null;continue;}
@@ -264,12 +264,17 @@ function parseNCC(rows){
   /* Hàng MỞ KHỐI = tên SPDV ở cột nhãn VÀ cột NCC kế bên TRỐNG (chính là hàng tổng của khối).
      Cột nhãn còn sót nhãn cũ có thể TRÙNG tên SPDV (vd nhãn cũ "Razer Gold" nằm ngay hàng
      SEAGM API giữa khối Gift Card) — hàng có tên NCC thật ở cột kế thì KHÔNG mở khối mới. */
-  if(sp&&!okName(nm)){cur=(sec==='nhap')?sp:null;
+  if(sp&&!okName(nm)){cur=(sec==='nhap')?sp:null;lastPre='';
    if(cur){if(!data[cur])data[cur]=[];if(!hdr[cur])hdr[cur]=row;}continue;}
   if(!cur)continue;
-  /* tên NCC thật ở cột kế bên phải cột nhãn (kể cả khi trùng tên SPDV như "Supercell" trong
+  /* tên thật ở cột kế bên phải cột nhãn (kể cả khi trùng tên SPDV như "Supercell" trong
      khối Topup); cột kế trống thì mới dùng cột nhãn */
-  const ncc=okName(nm)?nm:(''+(row[spCol]||'')).trim();
+  const pre=(''+(row[spCol]||'')).trim();
+  if(okName(pre))lastPre=pre; /* nhớ NCC gần nhất trong khối (ô merge chỉ ghi dòng đầu) — hàng này chắc chắn không phải mở khối nên nhãn là dữ liệu, kể cả khi trùng tên SPDV như Supercell */
+  let ncc=okName(nm)?nm:pre;
+  /* "người nhập" dạng AUTO/Thủ công (khối Topup theo NV): ghép với NCC ở cột nhãn
+     (Oggaming · AUTO, Galaxylink · AUTO…) để 2 dòng AUTO của 2 NCC khác nhau không bị gộp mất */
+  if(okName(nm)&&/^(auto|thủ\s*công|thu\s*cong|manual)$/i.test(nm)&&lastPre)ncc=lastPre+' · '+nm;
   if(okName(ncc))data[cur].push({name:ncc,row});}
  return {data,col,spCol,hdr};}
 /* validator: nguồn đọc về phải parse ra số thật thì mới nhận (không thì thử nguồn kia) */
