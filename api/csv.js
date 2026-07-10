@@ -1,16 +1,22 @@
 // Vercel Serverless Function (CommonJS) — đọc CSV từ link PUBLISH của Google Sheet
-// Gọi: /api/csv?gid=<gid>
+// Gọi: /api/csv?gid=<gid>[&f=<file>]  (f=def: Dash Report PCU 2026 · f=ton: file Tồn kho PVH6)
 module.exports = async (req, res) => {
-  const KEY = "2PACX-1vSve6XRHg5gWRzqkazHm5zvlrkTkAMLa7TJms_U-ebAFcrDAmcvCYfNJ50hrvV988tXyKC7q70LQgPc";
-  const ALLOW = new Set([
-    "460836856","1758921427","163849763","562469906","61864847",
-    "1043029815","1868031300","793401472","1289659560","1711960798",
-    "153250085", // Data Nhập Theo Nhân viên
-    "386815906"  // Data Robux — giá vốn PVH4
-  ]);
+  const FILES = {
+    def: "2PACX-1vSve6XRHg5gWRzqkazHm5zvlrkTkAMLa7TJms_U-ebAFcrDAmcvCYfNJ50hrvV988tXyKC7q70LQgPc",
+    ton: "2PACX-1vQToyJFyIIxiDtucrAhxnTVZmjNWF2InPci5r-C75DfkHR6aQbUrmZNBcwDDadNrET82VwxtdjDhITE"
+  };
+  const ALLOW = {
+    def: new Set([
+      "460836856","1758921427","163849763","562469906","61864847",
+      "1043029815","1868031300","793401472","1289659560","1711960798",
+      "153250085","386815906"
+    ]),
+    ton: new Set(["0"])
+  };
+  const f = String((req.query && req.query.f) || "def");
   const gid = String((req.query && req.query.gid) || "");
-  if (!ALLOW.has(gid)) { res.status(400).send("gid khong hop le: " + gid); return; }
-  const url = "https://docs.google.com/spreadsheets/d/e/" + KEY +
+  if (!FILES[f] || !ALLOW[f].has(gid)) { res.status(400).send("nguon khong hop le: " + f + "/" + gid); return; }
+  const url = "https://docs.google.com/spreadsheets/d/e/" + FILES[f] +
               "/pub?gid=" + gid + "&single=true&output=csv";
   try {
     const r = await fetch(url, { redirect: "follow" });

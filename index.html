@@ -632,7 +632,42 @@ const PAGES={
      renderP5Table();
    });
  }},
- PVH6:{title:"PVH6 · Tồn & tuổi tồn",meta:"Tần suất: Tuần",render:h=>frameOnly(h,"Cần nguồn TỒN thống nhất (RBX/Razer/GC có tồn riêng; Robux tồn ở Hub/Daily). Tuổi tồn cần ngày nhập từng đơn vị.")},
+ PVH6:{title:"PVH6 · Tồn kho & DIO (số ngày tồn)",meta:"Nguồn tồn: file Tồn kho riêng (publish) · DIO = Tiền tồn ÷ CO Xuất bình quân/ngày trong phạm vi lọc · DPO (công nợ NCC) làm đợt sau",render(host){
+   host.innerHTML=spinner("Đang đọc file Tồn kho và tính DIO…");
+   tonKhoData().then(L=>{
+     if(!L){const sample=TONKHO_ROWS||[];
+       const prev=sample.length?`<div class="card" style="margin-top:12px"><h3>Dữ liệu thô đọc về (12 dòng đầu × 12 cột) — chụp màn hình gửi lại nếu vẫn lỗi</h3><div class="scroll"><table class="tbl"><thead><tr><th>#</th>${Array.from({length:12},(_,c)=>`<th>${String.fromCharCode(65+c)}</th>`).join('')}</tr></thead><tbody>${sample.map((r,i)=>`<tr><td>${i+1}</td>${Array.from({length:12},(_,c)=>`<td>${((''+((r||[])[c]??'')).slice(0,16))}</td>`).join('')}</tr>`).join('')}</tbody></table></div></div>`:'';
+       host.innerHTML=`<div class="note"><b>Không đọc được file Tồn kho</b>${sample.length?' — đọc được dữ liệu nhưng không dò ra cột (cần: Danh mục/SPDV · Số lượng · Số tiền)':' — không tải được CSV (file chưa Publish to web hoặc link đổi)'}.<br><button class="btn" style="margin-top:8px" onclick="TONKHO=undefined;TONKHO_ROWS=null;render()">↻ Thử lại</button></div>${prev}`;return;}
+     const days=daysOfScope();
+     const touched=Object.keys(monthsInRange()).map(Number);
+     const xd=sp=>{let x=0;touched.forEach(mi=>{x+=(XUAT[sp]&&XUAT[sp][mi])||0;});return x/days;};
+     const rowsD=L.map(it=>{const sp=tonMapSP(it.name);const xday=sp?xd(sp):0;
+       return {...it,sp,xday,dio:xday>0?it.tien/xday:null};});
+     const totTien=rowsD.reduce((a,r)=>a+r.tien,0);
+     const totXday=SPDV.reduce((a,sp)=>a+xd(sp),0);
+     const dioAll=totXday>0?totTien/totXday:null;
+     const top=rowsD.slice().sort((a,b)=>b.tien-a.tien)[0];
+     const f1=n=>n==null?'—':n.toLocaleString('vi-VN',{minimumFractionDigits:1,maximumFractionDigits:1});
+     host.innerHTML=`
+      <div class="kpis">
+       ${kpi("Tổng tiền tồn",fmt(totTien),L.length+" dòng tồn · "+scopeLabel())}
+       ${kpi("DIO toàn phòng",f1(dioAll)+" ngày","Tổng tồn ÷ tổng Xuất BQ/ngày ("+fmt(Math.round(totXday))+" đ/ngày)")}
+       ${kpi("Tồn lớn nhất",top?top.name:"—",top?fmt(top.tien):"")}
+       ${kpi("DPO — công nợ NCC","(đợt sau)","Days Payable Outstanding — chờ nguồn công nợ")}
+      </div>
+      <div class="grid2" style="grid-template-columns:1fr 1fr">${cc("Tiền tồn theo dòng","p6a")}${cc("DIO theo dòng (ngày) — chỉ dòng map được SPDV","p6b")}</div>
+      <div class="card"><h3>Tồn kho & DIO theo SPDV — ${scopeLabel()}</h3><div class="scroll"><table class="tbl"><thead><tr><th>Danh mục</th><th class="n">SL tồn</th><th class="n">Tiền tồn</th><th class="n">Tỷ trọng</th><th class="n">Xuất BQ/ngày</th><th class="n">DIO (ngày)</th></tr></thead><tbody>
+      ${rowsD.map(r=>`<tr><td>${r.name}</td><td class="n">${fmtn(r.sl)}</td><td class="n">${fmtn(r.tien)}</td><td class="n">${pct(r.tien/(totTien||1))}</td><td class="n">${r.xday>0?fmt(Math.round(r.xday)):'—'}</td><td class="n"><b>${f1(r.dio)}</b></td></tr>`).join('')}
+      <tr style="font-weight:bold;background:#eef4ff"><td>TỔNG</td><td class="n">—</td><td class="n">${fmt(totTien)}</td><td class="n">100%</td><td class="n">${fmt(Math.round(totXday))}</td><td class="n">${f1(dioAll)}</td></tr>
+      </tbody></table></div>
+      <div class="small" style="margin-top:6px">DIO = Tiền tồn ÷ (CO Xuất bình quân/ngày, tính từ Data theo SPDV trong phạm vi lọc — ${days} ngày). Dòng không map được SPDV (chưa có CO Xuất tương ứng) hiển thị "—". Tuổi tồn chi tiết theo lô sẽ bổ sung khi có ngày nhập từng đơn vị tồn.</div></div>`;
+     const srt=rowsD.slice().sort((a,b)=>b.tien-a.tien);
+     mk("p6a",{type:'bar',data:{labels:srt.map(r=>r.name),datasets:[{data:srt.map(r=>r.tien),backgroundColor:'#1e5fd0'}]},options:hbarOpt()});
+     const dd=rowsD.filter(r=>r.dio!=null).sort((a,b)=>b.dio-a.dio);
+     mk("p6b",{type:'bar',data:{labels:dd.map(r=>r.name),datasets:[{data:dd.map(r=>+r.dio.toFixed(1)),backgroundColor:dd.map(r=>r.dio>30?'#f43f5e':(r.dio>14?'#fbbf24':'#34d399'))}]},
+      options:{indexAxis:'y',plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.parsed.x+' ngày'}}},scales:{x:{...yG,ticks:{callback:v=>v+' ng'}},y:noX}}});
+   });
+ }},
  PVH7:{title:"PVH7 · Đối soát Tiền–Hàng–Đơn",meta:"Tần suất: Tuần",render:h=>frameOnly(h,"Xương sống P&L: Backend(đơn) ↔ Kho(hàng) ↔ Kế toán(tiền). Cần chốt logic đối soát GC (3 ví BSV) & Topup.")},
  PVH11:{title:"PVH11 · Tỷ lệ lỗi nhập theo SPDV",meta:"Lỗi = Thiệt hại (die/lỗi/KBH) / CO Nhập",render(host){
    const sc=scopeData();
@@ -812,6 +847,40 @@ function parseCostTab(rows,cfg){
   if(tien>0){const m=M[dt.mo];m.rows++;m.sl+=sl;m.tien+=tien;}
   else if(sl>0){const m=M[dt.mo];m.donRows++;m.donSl+=sl;} /* dòng tiền 0 (nick dồn/gom) — chỉ đối chiếu, KHÔNG tính GV */}
  return M.some(m=>m.tien>0)?M:null;}
+/* ===== PVH6: Tồn kho & DIO — nguồn: FILE RIÊNG (publish key khác) ===== */
+const BASE_TON="https://docs.google.com/spreadsheets/d/e/2PACX-1vQToyJFyIIxiDtucrAhxnTVZmjNWF2InPci5r-C75DfkHR6aQbUrmZNBcwDDadNrET82VwxtdjDhITE/pub";
+function tonDirectURL(){return BASE_TON+"?gid=0&single=true&output=csv";}
+function tonApiURL(){return "/api/csv?f=ton&gid=0";}
+let TONKHO,TONKHO_ROWS=null;
+function parseTonKho(rows){
+ if(!rows||rows.length<2)return null;
+ const norm=x=>{try{x=(''+x).normalize('NFC');}catch(e){x=''+x;}return x.replace(/\u00A0/g,' ').trim().toLowerCase();};
+ let H=-1,iName=-1,iSL=-1,iTien=-1;
+ for(let r=0;r<Math.min(rows.length,30);r++){const row=(rows[r]||[]).map(norm);
+  const a=row.findIndex(x=>/danh\s*mục|spdv|sản\s*phẩm|mặt\s*hàng|^tên/.test(x));
+  const b=row.findIndex(x=>(/số\s*lượng|^sl$/.test(x))&&!/tiền/.test(x));
+  const c=row.findIndex(x=>/số\s*tiền|thành\s*tiền|giá\s*trị|tiền\s*tồn/.test(x));
+  if(a>-1&&b>-1&&c>-1){H=r;iName=a;iSL=b;iTien=c;break;}}
+ if(H<0)return null;
+ const list=[];
+ for(let r=H+1;r<rows.length;r++){const row=rows[r];if(!row)continue;
+  const name=(''+(row[iName]||'')).trim();
+  if(!name||/^tổng/i.test(name)||name.toLowerCase()==='nan')continue;
+  const sl=num(row[iSL]),tien=num(row[iTien]);
+  if(!(sl>0)&&!(tien>0))continue;
+  list.push({name,sl,tien});}
+ return list.length?list:null;}
+async function tonKhoData(){if(TONKHO!==undefined)return TONKHO;
+ let rows=await loadCSV(tonDirectURL());let L=parseTonKho(rows);
+ if(!L){const r2=await loadCSV(tonApiURL());if(r2)rows=r2;L=parseTonKho(r2);}
+ TONKHO_ROWS=rows?rows.slice(0,12):null;TONKHO=L;return TONKHO;}
+/* số ngày thực của các tháng chạm khoảng lọc (tháng hiện tại chỉ tính số ngày đã qua) */
+function daysOfScope(){const t=today();let d=0;
+ Object.keys(monthsInRange()).map(Number).forEach(mi=>{d+=(t.y===2026&&mi===t.mo)?Math.min(t.d,DAYS_IN[mi]):DAYS_IN[mi];});
+ return d||1;}
+/* map tên dòng tồn về SPDV để lấy CO Xuất (bỏ phần trong ngoặc: "Gift Card (Hub)" → Gift Card) */
+function tonMapSP(name){return canonSP(name)||canonSP(name.replace(/\(.+?\)/g,'').trim());}
+
 /* ===== PVH5: ma trận giá SKU × NCC — bình quân gia quyền trong khoảng lọc (Gift Card trước) ===== */
 const PRICECFG={gc:{gid:'1043029815',sp:'Gift Card',cur:'$'}};
 const PRICED={};
@@ -866,15 +935,15 @@ function buildNav(){let h='';TIERS.forEach(([t,label,ids])=>{h+=`<div class="tie
  ids.forEach(k=>{h+=`<div class="nav" data-id="${k}" onclick="go('${k}')"><span class="code">${k}</span><span class="dot" style="color:#2e86e6;background:#2e86e6"></span><span>${PAGES[k].title.split('· ')[1]}</span></div>`;});});
  document.getElementById('nav').innerHTML=h;}
 function renderSRC(){const host=document.getElementById('content');
- const tests=[['Data theo SPDV','460836856'],['Data theo NCC','1758921427'],['Data Nhập Theo Nhân viên',GIDS.nv],['Bảng tỉ giá','163849763'],['Data Robux (cũ)','562469906'],['Data Robux — giá vốn PVH4','386815906'],['Data giftcard','1043029815'],['Data Razergold','1868031300'],['Data OGGAMING','793401472'],['Data Nick Roblox','61864847']];
+ const tests=[['Data theo SPDV','460836856'],['Data theo NCC','1758921427'],['Data Nhập Theo Nhân viên',GIDS.nv],['Bảng tỉ giá','163849763'],['Data Robux (cũ)','562469906'],['Data Robux — giá vốn PVH4','386815906'],['Data giftcard','1043029815'],['Data Razergold','1868031300'],['Data OGGAMING','793401472'],['Data Nick Roblox','61864847'],['Tồn kho — FILE RIÊNG (PVH6)','TON']];
  host.innerHTML='<div class="card"><h3 style="text-align:left">Chẩn đoán nguồn dữ liệu — ưu tiên đọc TRỰC TIẾP Google Sheet, /api/csv là dự phòng</h3><div class="scroll"><table class="tbl" id="diag"><thead><tr><th>Tab</th><th>Google trực tiếp</th><th>/api/csv (dự phòng)</th><th class="n">Số dòng</th><th>Dòng đầu / lỗi</th></tr></thead><tbody></tbody></table></div><div class="small" style="margin-top:8px">Cần ít nhất 1 cột xanh cho mỗi tab. "Google trực tiếp" lỗi = tab chưa được Publish to web hoặc bị chặn CORS; "/api/csv" 404 = function Vercel chưa deploy.</div></div>';
  const tb=document.querySelector('#diag tbody');
  const probe=async url=>{try{const c=new AbortController();const to=setTimeout(()=>c.abort(),15000);const r=await fetch(url,{signal:c.signal});clearTimeout(to);const t=await r.text();const rows=t.split(/\r?\n/).filter(x=>x.length);return{ok:r.ok&&rows.length>1,code:r.status,n:rows.length,head:(rows[0]||'(rỗng)').slice(0,60)};}catch(e){return{ok:false,code:'ERR',n:0,head:e&&e.message?e.message:''+e};}};
  tests.forEach(([nm,gid])=>{const tr=document.createElement('tr');tr.innerHTML=`<td>${nm}</td><td>…</td><td>…</td><td class="n">…</td><td class="small">đang gọi…</td>`;tb.appendChild(tr);
-   (async()=>{const d=await probe(directURL(gid));
+   (async()=>{const du=gid==='TON'?tonDirectURL():directURL(gid),au=gid==='TON'?tonApiURL():apiURL(gid);const d=await probe(du);
      tr.children[1].textContent=d.ok?'✓ '+d.code:'✗ '+d.code;tr.children[1].style.color=d.ok?'#0f7a4d':'#9a3b2a';
      let use=d;
-     if(!d.ok){const a=await probe(apiURL(gid));tr.children[2].textContent=a.ok?'✓ '+a.code:'✗ '+a.code;tr.children[2].style.color=a.ok?'#0f7a4d':'#9a3b2a';if(a.ok)use=a;}
+     if(!d.ok){const a=await probe(au);tr.children[2].textContent=a.ok?'✓ '+a.code:'✗ '+a.code;tr.children[2].style.color=a.ok?'#0f7a4d':'#9a3b2a';if(a.ok)use=a;}
      else tr.children[2].textContent='— (không cần)';
      tr.children[3].textContent=use.n;tr.children[4].textContent=use.head;tr.children[4].style.color=use.ok?'#0f7a4d':'#9a3b2a';})();});
 }
