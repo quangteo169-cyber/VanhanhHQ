@@ -4,7 +4,8 @@ module.exports = async (req, res) => {
   const KEY = "2PACX-1vSve6XRHg5gWRzqkazHm5zvlrkTkAMLa7TJms_U-ebAFcrDAmcvCYfNJ50hrvV988tXyKC7q70LQgPc";
   const ALLOW = new Set([
     "460836856","1758921427","163849763","562469906","61864847",
-    "1043029815","1868031300","793401472","1289659560","1711960798"
+    "1043029815","1868031300","793401472","1289659560","1711960798",
+    "153250085" // Data Nhập Theo Nhân viên
   ]);
   const gid = String((req.query && req.query.gid) || "");
   if (!ALLOW.has(gid)) { res.status(400).send("gid khong hop le: " + gid); return; }

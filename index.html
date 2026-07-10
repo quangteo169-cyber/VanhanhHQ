@@ -175,7 +175,7 @@ async function fetchGid(gid,valid){
  const b=await loadCSV(apiURL(gid));
  if(b&&b.length>1&&(!valid||valid(b)))return b;
  return (b&&b.length>1)?b:((a&&a.length>1)?a:null);}
-const GIDS={ spdv:"460836856", ncc:"1758921427", fx:"163849763", nv:"1711960798" /* Data Nhập Theo Nhân viên — đổi tại đây nếu gid khác */ };
+const GIDS={ spdv:"460836856", ncc:"1758921427", fx:"163849763", nv:"153250085" /* Data Nhập Theo Nhân viên */ };
 let NCC_ALL={};
 let NCC_TOT={}; /* hàng tổng từng khối SPDV trên sheet — dùng đối soát PVH2 */
 let FXMAP={},FXKEYS=[];
