@@ -175,7 +175,7 @@ async function fetchGid(gid,valid){
  const b=await loadCSV(apiURL(gid));
  if(b&&b.length>1&&(!valid||valid(b)))return b;
  return (b&&b.length>1)?b:((a&&a.length>1)?a:null);}
-const GIDS={ spdv:"460836856", ncc:"1758921427", fx:"163849763" };
+const GIDS={ spdv:"460836856", ncc:"1758921427", fx:"163849763", nv:"1711960798" /* Data Nhập Theo Nhân viên — đổi tại đây nếu gid khác */ };
 let NCC_ALL={};
 let NCC_TOT={}; /* hàng tổng từng khối SPDV trên sheet — dùng đối soát PVH2 */
 let FXMAP={},FXKEYS=[];
@@ -278,9 +278,15 @@ function applyLive(a,b){let ok=false;
    if(hit){/* chỉ ghi đè khi parse ra số thật — tránh xoá số dự phòng bằng 0 */
      SPDV.forEach(sp=>{for(let i=0;i<12;i++){NHAP[sp][i]=P.val(P.nhap,sp,i);XUAT[sp]=XUAT[sp]||Array(12).fill(0);XUAT[sp][i]=P.val(P.xuat,sp,i);if(DIE[sp])DIE[sp][i]=P.thiethai(sp,i);}});
      for(let i=0;i<12;i++){DON.Robux[i]=P.don(i);TON[i]=P.ton(i);}ok=true;}}
- if(b&&b.length){const N=parseNCC(b);const all={};Object.keys(N.data).forEach(sp=>{
-   /* mỗi NCC một dòng; chỉ gộp khi TRÙNG HỆT tên (không phân biệt hoa thường) —
-      "SEAGM" và "SEAGM API" là 2 NCC khác nhau, không bao giờ bị trộn */
+ if(b&&b.length){const r=aggByName(b);
+   if(Object.keys(r.all).length){NCC_ALL=r.all;NCC_TOT=r.tots;
+     const rb=r.all["Robux"];if(rb)NCC_ROBUX=rb.map(x=>[x[0],x[1].reduce((a,b)=>a+b,0)]).sort((a,b)=>b[1]-a[1]).slice(0,10);}}
+ return ok;}
+/* Gom tab dạng "khối theo SPDV, mỗi dòng một tên" (Data theo NCC · Data Nhập Theo Nhân viên):
+   mỗi tên một dòng; chỉ gộp khi TRÙNG HỆT tên (không phân biệt hoa thường) —
+   "SEAGM" và "SEAGM API" là 2 tên khác nhau, không bao giờ bị trộn */
+function aggByName(rows){const N=parseNCC(rows);const all={},tots={};
+ Object.keys(N.data).forEach(sp=>{
    const m={},ord=[];
    N.data[sp].forEach(it=>{const vals=[];for(let i=0;i<12;i++){const c=N.col[i];vals.push(c!=null?num(it.row[c]):0);}
     if(!it.name||!vals.some(v=>v>0))return;
@@ -288,13 +294,13 @@ function applyLive(a,b){let ok=false;
     if(!m[k]){m[k]=[it.name,vals.slice()];ord.push(k);}
     else{for(let i=0;i<12;i++)m[k][1][i]+=vals[i];}});
    const arr=ord.map(k=>m[k]);if(arr.length)all[sp]=arr;});
-   if(Object.keys(all).length){NCC_ALL=all;
-     const tots={};Object.keys(N.hdr||{}).forEach(sp=>{const vals=[];for(let i=0;i<12;i++){const c=N.col[i];vals.push(c!=null?num(N.hdr[sp][c]):0);}if(vals.some(v=>v>0))tots[sp]=vals;});NCC_TOT=tots;
-     const rb=all["Robux"];if(rb)NCC_ROBUX=rb.map(x=>[x[0],x[1].reduce((a,b)=>a+b,0)]).sort((a,b)=>b[1]-a[1]).slice(0,10);}}
- return ok;}
+ Object.keys(N.hdr||{}).forEach(sp=>{const vals=[];for(let i=0;i<12;i++){const c=N.col[i];vals.push(c!=null?num(N.hdr[sp][c]):0);}if(vals.some(v=>v>0))tots[sp]=vals;});
+ return {all,tots};}
+let NV_ALL={},NV_TOT={}; /* PVH3 — Data Nhập Theo Nhân viên */
+function applyNV(rows){if(!rows||!rows.length)return;const r=aggByName(rows);if(Object.keys(r.all).length){NV_ALL=r.all;NV_TOT=r.tots;}}
 async function loadLive(){
- const [a,b,fx]=await Promise.all([fetchGid(GIDS.spdv,VAL_SPDV),fetchGid(GIDS.ncc,VAL_NCC),fetchGid(GIDS.fx,VAL_FX)]);
- LIVE=applyLive(a,b);if(fx&&fx.length)parseFX(fx);
+ const [a,b,fx,nv]=await Promise.all([fetchGid(GIDS.spdv,VAL_SPDV),fetchGid(GIDS.ncc,VAL_NCC),fetchGid(GIDS.fx,VAL_FX),fetchGid(GIDS.nv,VAL_NCC)]);
+ LIVE=applyLive(a,b);if(fx&&fx.length)parseFX(fx);applyNV(nv);
  const e=document.getElementById('upd');if(e)e.textContent="Cập nhật "+new Date().toLocaleTimeString('vi-VN')+(LIVE?" · LIVE":" · số dự phòng");
  if(curr!=="SRC")render();}
 
@@ -364,6 +370,60 @@ function render(){destroy();const host=document.getElementById('content');const 
  document.getElementById('rmeta').innerHTML=`<span class="badge" style="background:#1e5fd0">Phạm vi: ${scopeLabel()}</span> &nbsp; ${R.meta}`;
  R.render(host);}
 
+/* ===== BÁO CÁO DẠNG "KHỐI THEO SPDV, MỖI DÒNG MỘT TÊN" — dùng chung PVH1 (NCC) & PVH3 (Nhân viên) ===== */
+const GRP={};
+function grpRetry(k){if(GRP[k]){GRP[k].failed=0;GRP[k].loading=0;}render();}
+function renderGroupReport(host,cfg){
+ const S=GRP[cfg.skey]=GRP[cfg.skey]||{};
+ const src=cfg.src(),tots=cfg.tots();
+ const sps=Object.keys(src).filter(s=>src[s]&&src[s].length);
+ if(!sps.length){
+   if(S.failed){
+     const sample=S.rows||[];
+     const prev=sample.length?`<div class="card" style="margin-top:12px"><h3>Dữ liệu thô đọc về (10 dòng đầu × 12 cột) — chụp màn hình gửi lại nếu vẫn lỗi</h3><div class="scroll"><table class="tbl"><thead><tr><th>#</th>${Array.from({length:12},(_,c)=>`<th>${String.fromCharCode(65+c)}</th>`).join('')}</tr></thead><tbody>${sample.slice(0,10).map((r,i)=>`<tr><td>${i+1}</td>${Array.from({length:12},(_,c)=>`<td>${((''+((r||[])[c]??'')).slice(0,18))}</td>`).join('')}</tr>`).join('')}</tbody></table></div></div>`:'';
+     host.innerHTML=`<div class="note"><b>Không đọc được ${cfg.name} thành số liệu.</b><br>Chẩn đoán: ${S.diag||'(chưa có)'}<br>Parser cần: một cột chứa tên SPDV (Robux, Gift Card…) mở từng khối kèm hàng tổng, cột kế bên là tên ${cfg.unit}, và hàng tiêu đề tháng (Tháng 01 / T01 / 01/2026…). Nếu sai gid, sửa hằng GIDS trong index.html.<br><button class="btn" style="margin-top:8px" onclick="grpRetry('${cfg.skey}')">↻ Thử lại</button></div>${prev}`;return;}
+   host.innerHTML=spinner("Đang tải "+cfg.name+"…");
+   if(!S.loading){S.loading=1;
+     fetchGid(cfg.gid,VAL_NCC).then(rows=>{
+      if(rows){S.rows=rows.slice(0,10);const N=parseNCC(rows);const nsp=Object.keys(N.data).filter(sp=>N.data[sp].length).length;
+        S.diag='đọc được '+rows.length+' dòng · nhận diện '+nsp+' khối SPDV · cột tháng: '+(monthCols(rows)?'tự dò được':'dùng mặc định');
+        cfg.apply(rows);}
+      else S.diag='không đọc được — cả link Google trực tiếp lẫn /api/csv đều lỗi/không đúng cấu trúc (gid đang dùng: '+cfg.gid+')';
+      S.loading=0;S.failed=!Object.keys(cfg.src()).length;if(curr===cfg.page)render();}).catch(e=>{S.diag='Lỗi fetch: '+(e&&e.message?e.message:e);S.loading=0;S.failed=1;if(curr===cfg.page)render();});}
+   return;}
+ const tmn=Object.keys(monthsInRange()).map(Number).sort((a,b)=>a-b);
+ /* gom số một lần: dùng cho cả ô KPI tổng ở trên lẫn card chi tiết ở dưới */
+ const agg={};
+ sps.forEach(sp=>{const list=src[sp].map(x=>[x[0],tmn.reduce((a,mi)=>a+(x[1][mi]||0),0),x[1]]).filter(x=>x[1]>0).sort((a,b)=>b[1]-a[1]);
+   const tot=list.reduce((a,x)=>a+x[1],0);
+   const sheetT=tots[sp]?tmn.reduce((a,mi)=>a+(tots[sp][mi]||0),0):null;
+   /* ô tổng hiển thị THEO HÀNG TỔNG SHEET khi khối có hàng tổng; cộng chi tiết chỉ dùng đối soát */
+   agg[sp]={list,tot,sheetT,disp:sheetT!=null?sheetT:tot};});
+ let h=`<div class="small" style="margin-bottom:10px">Phạm vi ${scopeLabel()} · CO Nhập theo ${cfg.unit} (cộng trọn tháng chạm khoảng: ${tmn.map(m=>'T'+(m+1)).join('+')}) · ${sps.length} SPDV · bấm <b>Cả kỳ</b> để khớp cột "2026"</div>`;
+ h+=`<div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr))">${sps.map(sp=>kpi('Tổng CO Nhập · '+sp,fmt(agg[sp].disp),agg[sp].list.length+' '+cfg.unit+' · top: '+(agg[sp].list[0]?agg[sp].list[0][0]:'—')+(agg[sp].sheetT!=null?' · theo hàng tổng sheet':''))).join('')}</div>`;
+ h+='<div class="grid2">';
+ sps.forEach((sp,idx)=>{
+   const list=agg[sp].list,tot=agg[sp].tot,sheetT=agg[sp].sheetT;
+   const diff=sheetT!=null?tot-sheetT:null;
+   /* 3 mức đối soát: khớp tuyệt đối (xanh) · lệch nhỏ ≤0.1% (vàng) · lệch lớn (đỏ) */
+   let dsHtml='';
+   if(sheetT!=null){
+     if(diff===0)dsHtml=`<div class="small" style="text-align:center;margin:-4px 0 6px;color:#0f7a4d">Đối soát: cộng ${cfg.unit} ${fmt(tot)} ✓ khớp tuyệt đối hàng tổng sheet</div>`;
+     else if(Math.abs(diff)<=Math.max(1,Math.round((sheetT||0)*0.001)))dsHtml=`<div class="small" style="text-align:center;margin:-4px 0 6px;color:#8a5b12">Đối soát: cộng ${cfg.unit} ${fmt(tot)} ≈ hàng tổng sheet ${fmt(sheetT)} (lệch nhỏ ${fmt(Math.abs(diff))} · ${pct(Math.abs(diff)/(sheetT||1))})</div>`;
+     else dsHtml=`<div class="small" style="text-align:center;margin:-4px 0 6px;color:#b91c1c;font-weight:bold">Đối soát: cộng ${cfg.unit} ${fmt(tot)} ≠ hàng tổng sheet ${fmt(sheetT)} (lệch ${fmt(diff)}) — hàng tổng khối này có thể không phải tổng cộng ${cfg.unit}</div>`;}
+   h+=`<div class="card"><h3>${sp} — ${list.length} ${cfg.unit} · ${fmt(agg[sp].disp)}</h3>
+     ${dsHtml}
+     <div class="chartbox sm"><canvas id="${cfg.pfx}_${idx}"></canvas></div>
+     <div class="small" style="text-align:center;margin-top:4px">Biểu đồ: top 10 · bảng dưới: đầy đủ ${list.length} ${cfg.unit}</div>
+     <div class="scroll" style="max-height:280px;margin-top:6px"><table class="tbl"><thead><tr><th>${cfg.unit}</th>${tmn.map(mi=>`<th class="n">T${pad2(mi+1)}</th>`).join('')}<th class="n">Tổng</th><th class="n">%</th></tr></thead><tbody>
+     ${list.map(x=>`<tr><td>${x[0]}</td>${tmn.map(mi=>`<td class="n">${fmtn(x[2][mi])}</td>`).join('')}<td class="n"><b>${fmtn(x[1])}</b></td><td class="n">${pct(x[1]/(tot||1))}</td></tr>`).join('')}
+     <tr style="font-weight:bold;background:#eef4ff"><td>Cộng ${list.length} ${cfg.unit}</td>${tmn.map(mi=>`<td class="n">${fmtn(list.reduce((a,x)=>a+(x[2][mi]||0),0))}</td>`).join('')}<td class="n">${fmtn(tot)}</td><td class="n">100%</td></tr>
+     ${sheetT!=null?`<tr style="font-weight:bold;color:#0b3a8f;background:#eef4ff"><td>Hàng tổng trên sheet</td>${tmn.map(mi=>`<td class="n">${fmtn(tots[sp][mi])}</td>`).join('')}<td class="n">${fmtn(sheetT)}</td><td class="n">—</td></tr>`:''}
+     </tbody></table></div></div>`;});
+ h+='</div>';host.innerHTML=h;
+ sps.forEach((sp,idx)=>{const list=agg[sp].list.slice(0,10);mk(cfg.pfx+"_"+idx,{type:'bar',data:{labels:list.map(x=>x[0]),datasets:[{data:list.map(x=>x[1]),backgroundColor:list.map((_,i)=>i===0?'#0b3a8f':(i<4?'#1e5fd0':'#4aa8f0'))}]},options:hbarOpt()});});
+}
+
 const PAGES={
  TQ:{title:"Tổng quan vận hành",meta:"Nguồn: Data theo SPDV — Nhập · Xuất · Thiệt hại · Dồn · Tồn theo tháng",render(host){
    const sc=scopeData();const prev=prevScope(scopeData);const mom=prev&&prev.totalNhap?sc.totalNhap/prev.totalNhap-1:0;
@@ -402,56 +462,7 @@ const PAGES={
    mk("p1c",{type:'bar',data:{labels:trDon.labels,datasets:[{data:trDon.values,backgroundColor:GREEN,borderRadius:2}]},options:barOpt(false)});
  }},
  PVH1:{title:"PVH1 · NXT theo NCC (phân theo SPDV)",meta:"Nguồn: Data theo NCC (theo tháng)",render(host){
-   const touched=Object.keys(monthsInRange()).map(Number);const src=NCC_ALL;
-   /* hiển thị theo đúng thứ tự khối trên sheet — gồm cả RBX/Topup và khối mới sau này */
-   const sps=Object.keys(src).filter(s=>src[s]&&src[s].length);
-   if(!sps.length){
-     if(window.__nccFailed){
-       const sample=window.__nccRows||[];
-       const prev=sample.length?`<div class="card" style="margin-top:12px"><h3>Dữ liệu thô đọc về (10 dòng đầu × 12 cột) — chụp màn hình gửi lại nếu vẫn lỗi</h3><div class="scroll"><table class="tbl"><thead><tr><th>#</th>${Array.from({length:12},(_,c)=>`<th>${String.fromCharCode(65+c)}</th>`).join('')}</tr></thead><tbody>${sample.slice(0,10).map((r,i)=>`<tr><td>${i+1}</td>${Array.from({length:12},(_,c)=>`<td>${((''+((r||[])[c]??'')).slice(0,18))}</td>`).join('')}</tr>`).join('')}</tbody></table></div></div>`:'';
-       host.innerHTML=`<div class="note"><b>Không đọc được Data theo NCC thành số liệu.</b><br>Chẩn đoán: ${window.__nccDiag||'(chưa có)'}<br>Parser cần: một cột chứa tên SPDV (Robux, Gift Card, Token/Item (Token)…) mở từng khối, cột kế bên là tên NCC, và hàng tiêu đề tháng (Tháng 01 / T01 / 01-2026…).<br><button class="btn" style="margin-top:8px" onclick="window.__nccFailed=0;window.__nccLoading=0;render()">↻ Thử lại</button></div>${prev}`;return;}
-     host.innerHTML=spinner("Đang tải Data theo NCC…");
-     if(!window.__nccLoading){window.__nccLoading=1;
-       fetchGid('1758921427',VAL_NCC).then(rows=>{
-        if(rows){window.__nccRows=rows.slice(0,10);const N=parseNCC(rows);const nsp=Object.keys(N.data).filter(sp=>N.data[sp].length).length;
-          window.__nccDiag='đọc được '+rows.length+' dòng · nhận diện '+nsp+' khối SPDV · cột tháng: '+(monthCols(rows)?'tự dò được':'dùng mặc định');
-          applyLive(null,rows);}
-        else window.__nccDiag='không đọc được — cả link Google trực tiếp lẫn /api/csv đều lỗi/không đúng cấu trúc';
-        window.__nccLoading=0;window.__nccFailed=!Object.keys(NCC_ALL).length;if(curr==='PVH1')render();}).catch(e=>{window.__nccDiag='Lỗi fetch: '+(e&&e.message?e.message:e);window.__nccLoading=0;window.__nccFailed=1;if(curr==='PVH1')render();});}
-     return;}
-   const tmn=touched.slice().sort((a,b)=>a-b);
-   /* gom số một lần: dùng cho cả ô KPI tổng ở trên lẫn card chi tiết ở dưới */
-   const agg={};
-   sps.forEach(sp=>{const list=src[sp].map(x=>[x[0],tmn.reduce((a,mi)=>a+(x[1][mi]||0),0),x[1]]).filter(x=>x[1]>0).sort((a,b)=>b[1]-a[1]);
-     const tot=list.reduce((a,x)=>a+x[1],0);
-     const sheetT=NCC_TOT[sp]?tmn.reduce((a,mi)=>a+(NCC_TOT[sp][mi]||0),0):null;
-     /* ô tổng hiển thị THEO HÀNG TỔNG SHEET khi khối có hàng tổng; cộng NCC chỉ dùng đối soát */
-     agg[sp]={list,tot,sheetT,disp:sheetT!=null?sheetT:tot};});
-   let h=`<div class="small" style="margin-bottom:10px">Phạm vi ${scopeLabel()} · CO theo NCC (cộng trọn tháng chạm khoảng: ${tmn.map(m=>'T'+(m+1)).join('+')}) · ${sps.length} SPDV · bấm <b>Cả kỳ</b> để khớp cột "2026"</div>`;
-   h+=`<div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr))">${sps.map(sp=>kpi('Tổng CO Nhập · '+sp,fmt(agg[sp].disp),agg[sp].list.length+' NCC · top: '+(agg[sp].list[0]?agg[sp].list[0][0]:'—')+(agg[sp].sheetT!=null?' · theo hàng tổng sheet':''))).join('')}</div>`;
-   h+='<div class="grid2">';
-   sps.forEach((sp,idx)=>{
-     const list=agg[sp].list;
-     const tot=agg[sp].tot;
-     const sheetT=agg[sp].sheetT;
-     const diff=sheetT!=null?tot-sheetT:null;
-     /* 3 mức đối soát: khớp tuyệt đối (xanh) · lệch nhỏ ≤0.1% (vàng) · lệch lớn (đỏ — hàng tổng của khối có thể không phải tổng cộng NCC) */
-     let dsHtml='';
-     if(sheetT!=null){
-       if(diff===0)dsHtml=`<div class="small" style="text-align:center;margin:-4px 0 6px;color:#0f7a4d">Đối soát: cộng NCC ${fmt(tot)} ✓ khớp tuyệt đối hàng tổng sheet</div>`;
-       else if(Math.abs(diff)<=Math.max(1,Math.round((sheetT||0)*0.001)))dsHtml=`<div class="small" style="text-align:center;margin:-4px 0 6px;color:#8a5b12">Đối soát: cộng NCC ${fmt(tot)} ≈ hàng tổng sheet ${fmt(sheetT)} (lệch nhỏ ${fmt(Math.abs(diff))} · ${pct(Math.abs(diff)/(sheetT||1))})</div>`;
-       else dsHtml=`<div class="small" style="text-align:center;margin:-4px 0 6px;color:#b91c1c;font-weight:bold">Đối soát: cộng NCC ${fmt(tot)} ≠ hàng tổng sheet ${fmt(sheetT)} (lệch ${fmt(diff)}) — hàng tổng khối này có thể không phải tổng cộng NCC</div>`;}
-     h+=`<div class="card"><h3>${sp} — ${list.length} NCC · ${fmt(agg[sp].disp)}</h3>
-       ${dsHtml}
-       <div class="chartbox sm"><canvas id="p2_${idx}"></canvas></div>
-       <div class="small" style="text-align:center;margin-top:4px">Biểu đồ: top 10 · bảng dưới: đầy đủ ${list.length} NCC</div>
-       <div class="scroll" style="max-height:280px;margin-top:6px"><table class="tbl"><thead><tr><th>NCC</th>${tmn.map(mi=>`<th class="n">T${pad2(mi+1)}</th>`).join('')}<th class="n">Tổng</th><th class="n">%</th></tr></thead><tbody>
-       ${list.map(x=>`<tr><td>${x[0]}</td>${tmn.map(mi=>`<td class="n">${fmtn(x[2][mi])}</td>`).join('')}<td class="n"><b>${fmtn(x[1])}</b></td><td class="n">${pct(x[1]/(tot||1))}</td></tr>`).join('')}
-       <tr style="font-weight:bold;background:#eef4ff"><td>Cộng ${list.length} NCC</td>${tmn.map(mi=>`<td class="n">${fmtn(list.reduce((a,x)=>a+(x[2][mi]||0),0))}</td>`).join('')}<td class="n">${fmtn(tot)}</td><td class="n">100%</td></tr>
-       ${sheetT!=null?`<tr style="font-weight:bold;color:#0b3a8f;background:#eef4ff"><td>Hàng tổng trên sheet</td>${tmn.map(mi=>`<td class="n">${fmtn(NCC_TOT[sp][mi])}</td>`).join('')}<td class="n">${fmtn(sheetT)}</td><td class="n">—</td></tr>`:''}
-       </tbody></table></div></div>`;});
-   h+='</div>';host.innerHTML=h;
-   sps.forEach((sp,idx)=>{const list=agg[sp].list.slice(0,10);mk("p2_"+idx,{type:'bar',data:{labels:list.map(x=>x[0]),datasets:[{data:list.map(x=>x[1]),backgroundColor:list.map((_,i)=>i===0?'#0b3a8f':(i<4?'#1e5fd0':'#4aa8f0'))}]},options:hbarOpt()});});
+   renderGroupReport(host,{page:'PVH1',skey:'ncc',pfx:'p2',unit:'NCC',name:'Data theo NCC',gid:GIDS.ncc,src:()=>NCC_ALL,tots:()=>NCC_TOT,apply:rows=>applyLive(null,rows)});
  }},
  PVH8:{title:"PVH8 · Thất thoát / Gross Loss",meta:"★ BOD · Tháng/Ngày",render(host){
    const sc=scopeData();const gl=sc.totalDie/(sc.totalNhap||1);
@@ -463,17 +474,8 @@ const PAGES={
    mk("p8a",{type:'line',data:{labels:trN.labels,datasets:[{data:glv,fill:true,backgroundColor:'rgba(244,63,94,.16)',borderColor:RED,borderWidth:2,tension:.35,pointRadius:trN.labels.length>12?2:3,pointBackgroundColor:trN.labels.map((_,i)=>i===trN.hl?'#0b3a8f':RED)}]},options:{plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.parsed.y+'%'}}},scales:{x:noX,y:{...yG,beginAtZero:true,ticks:{callback:v=>v+'%'}}}}});
    mk("p8b",{type:'bar',data:{labels:Object.keys(DIE),datasets:[{data:Object.keys(DIE).map(s=>sc.die[s]),backgroundColor:RED}]},options:hbarOpt()});
  }},
- PVH3:{title:"PVH3 · NXT theo Nhân viên (mỗi SPDV 1 dashboard)",meta:"Nguồn raw: Robux · Nick · Gift Card",render(host){
-   host.innerHTML=spinner("Đang tải dữ liệu nhân viên (Robux · Nick · Gift Card)…");
-   ensureRaw(['robux','nick','gc']).then(()=>{
-     const M={robux:'Robux',nick:'Nick Random Roblox',gc:'Gift Card'};const KS=['robux','nick','gc'];
-     let h=`<div class="small" style="margin-bottom:10px">Phạm vi ${scopeLabel()} · giá trị = CO nhập theo nhân viên</div><div class="grid2">`;
-     KS.forEach((key,idx)=>{const list=groupSum(key,'emp');const tot=list.reduce((a,x)=>a+x[1],0);
-       h+=`<div class="card"><h3>${M[key]} — ${list.length} NV · ${fmt(tot)}</h3><div class="chartbox sm"><canvas id="p3_${idx}"></canvas></div>
-         <div class="scroll" style="max-height:150px;margin-top:8px"><table class="tbl"><tbody>${list.slice(0,10).map(x=>`<tr><td>${x[0]}</td><td class="n">${fmtn(x[1])}</td><td class="n">${pct(x[1]/(tot||1))}</td></tr>`).join('')}</tbody></table></div></div>`;});
-     h+='</div>';host.innerHTML=h;
-     KS.forEach((key,idx)=>{const list=groupSum(key,'emp').slice(0,10);mk("p3_"+idx,{type:'bar',data:{labels:list.map(x=>x[0]),datasets:[{data:list.map(x=>x[1]),backgroundColor:'#1e5fd0'}]},options:hbarOpt()});});
-   });
+ PVH3:{title:"PVH3 · NXT theo Nhân viên (mỗi SPDV 1 dashboard)",meta:"Nguồn: Data Nhập Theo Nhân viên (theo tháng)",render(host){
+   renderGroupReport(host,{page:'PVH3',skey:'nv',pfx:'p3',unit:'NV',name:'Data Nhập Theo Nhân viên',gid:GIDS.nv,src:()=>NV_ALL,tots:()=>NV_TOT,apply:applyNV});
  }},
  PVH9:{title:"PVH9 · Automation / thủ công (đơn Bot)",meta:"★ BOD · nguồn: Data Razergold",render(host){
    host.innerHTML=spinner("Đang đọc đơn Bot/thủ công từ Data Razergold…");
@@ -721,7 +723,7 @@ function buildNav(){let h='';TIERS.forEach(([t,label,ids])=>{h+=`<div class="tie
  ids.forEach(k=>{h+=`<div class="nav" data-id="${k}" onclick="go('${k}')"><span class="code">${k}</span><span class="dot" style="color:#2e86e6;background:#2e86e6"></span><span>${PAGES[k].title.split('· ')[1]}</span></div>`;});});
  document.getElementById('nav').innerHTML=h;}
 function renderSRC(){const host=document.getElementById('content');
- const tests=[['Data theo SPDV','460836856'],['Data theo NCC','1758921427'],['Bảng tỉ giá','163849763'],['Data Robux','562469906'],['Data giftcard','1043029815'],['Data Razergold','1868031300'],['Data OGGAMING','793401472'],['Data Nick Roblox','61864847']];
+ const tests=[['Data theo SPDV','460836856'],['Data theo NCC','1758921427'],['Data Nhập Theo Nhân viên',GIDS.nv],['Bảng tỉ giá','163849763'],['Data Robux','562469906'],['Data giftcard','1043029815'],['Data Razergold','1868031300'],['Data OGGAMING','793401472'],['Data Nick Roblox','61864847']];
  host.innerHTML='<div class="card"><h3 style="text-align:left">Chẩn đoán nguồn dữ liệu — ưu tiên đọc TRỰC TIẾP Google Sheet, /api/csv là dự phòng</h3><div class="scroll"><table class="tbl" id="diag"><thead><tr><th>Tab</th><th>Google trực tiếp</th><th>/api/csv (dự phòng)</th><th class="n">Số dòng</th><th>Dòng đầu / lỗi</th></tr></thead><tbody></tbody></table></div><div class="small" style="margin-top:8px">Cần ít nhất 1 cột xanh cho mỗi tab. "Google trực tiếp" lỗi = tab chưa được Publish to web hoặc bị chặn CORS; "/api/csv" 404 = function Vercel chưa deploy.</div></div>';
  const tb=document.querySelector('#diag tbody');
  const probe=async url=>{try{const c=new AbortController();const to=setTimeout(()=>c.abort(),15000);const r=await fetch(url,{signal:c.signal});clearTimeout(to);const t=await r.text();const rows=t.split(/\r?\n/).filter(x=>x.length);return{ok:r.ok&&rows.length>1,code:r.status,n:rows.length,head:(rows[0]||'(rỗng)').slice(0,60)};}catch(e){return{ok:false,code:'ERR',n:0,head:e&&e.message?e.message:''+e};}};
