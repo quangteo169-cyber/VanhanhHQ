@@ -188,7 +188,8 @@ function num(x){if(x==null)return 0;x=(''+x).replace(/["\s₫đ$%]/g,'');if(x===
  const n=parseFloat(x);return isNaN(n)?0:n;}
 function papaT(url,ms){return new Promise(res=>{let done=false;const to=setTimeout(()=>{if(!done){done=true;res(null);}},ms);
  try{Papa.parse(url,{download:true,complete:r=>{if(done)return;done=true;clearTimeout(to);res(r.data&&r.data.length?r.data:null);},error:()=>{if(done)return;done=true;clearTimeout(to);res(null);}});}catch(e){if(!done){done=true;clearTimeout(to);res(null);}}});}
-async function loadCSV(url){try{const c=new AbortController();const to=setTimeout(()=>c.abort(),15000);const r=await fetch(url,{signal:c.signal});clearTimeout(to);if(!r.ok)return null;const t=await r.text();
+async function loadCSV(url){try{const c=new AbortController();const to=setTimeout(()=>c.abort(),15000);const r=await fetch(url,{signal:c.signal});clearTimeout(to);if(!r.ok)return null;let t=await r.text();
+ try{t=t.normalize('NFC');}catch(e){} /* thống nhất unicode — tiêu đề gõ tay có thể ở dạng tổ hợp (NFD) làm trượt mọi phép so khớp tiếng Việt */
  /* Google trả trang HTML (đăng nhập/không có quyền) khi gid CHƯA được Publish to web — không phải CSV */
  const tt=t.trimStart().slice(0,300).toLowerCase();
  if(tt.startsWith('<')||tt.indexOf('<html')>-1||tt.indexOf('<!doctype')>-1)return null;
@@ -545,7 +546,9 @@ const PAGES={
  PVH4:{title:"PVH4 · Biến động giá vốn theo tháng — Robux",meta:"GV ĐV = Σ Thành tiền ÷ Σ SL (bình quân GIA QUYỀN, loại nick dồn tiền = 0) · cả kỳ, không phụ thuộc bộ lọc ngày",render(host){
    host.innerHTML=spinner("Đang đọc Data Robux và tính giá vốn gia quyền…");
    robuxCostMonths().then(M=>{
-     if(!M){host.innerHTML='<div class="note"><b>Không đọc được Data Robux</b> (gid 562469906) — cần các cột "Số lượng robux", "Thành tiền", "Ngày…". Kiểm tra ở trang <b>Nguồn &amp; Cấu hình</b>.</div>';return;}
+     if(!M){const sample=COSTRB_ROWS||[];
+       const prev=sample.length?`<div class="card" style="margin-top:12px"><h3>Dữ liệu thô đọc về (10 dòng đầu × 16 cột) — chụp màn hình gửi lại nếu vẫn lỗi</h3><div class="scroll"><table class="tbl"><thead><tr><th>#</th>${Array.from({length:16},(_,c)=>`<th>${String.fromCharCode(65+c)}</th>`).join('')}</tr></thead><tbody>${sample.map((r,i)=>`<tr><td>${i+1}</td>${Array.from({length:16},(_,c)=>`<td>${((''+((r||[])[c]??'')).slice(0,16))}</td>`).join('')}</tr>`).join('')}</tbody></table></div></div>`:'';
+       host.innerHTML=`<div class="note"><b>Không đọc được Data Robux</b> (gid 562469906)${sample.length?' — đọc được dữ liệu nhưng không dò ra hàng tiêu đề':' — không tải được CSV (kiểm tra Publish to web / trang Nguồn &amp; Cấu hình)'}.<br>Cần hàng tiêu đề có: cột chứa "Số lượng robux", cột "Thành tiền" (không phải "…dùng"/"…dồn &amp; Die"), và một cột "Ngày…".<br><button class="btn" style="margin-top:8px" onclick="COSTRB=undefined;COSTRB_ROWS=null;render()">↻ Thử lại</button></div>${prev}`;return;}
      const fmt2=n=>n.toLocaleString('vi-VN',{minimumFractionDigits:2,maximumFractionDigits:2});
      const ms=M.map((m,i)=>({mi:i,rows:m.rows,sl:m.sl,tien:m.tien,donSl:m.donSl,gv:m.sl>0?m.tien/m.sl:0})).filter(m=>m.tien>0);
      const totT=ms.reduce((a,m)=>a+m.tien,0),totS=ms.reduce((a,m)=>a+m.sl,0),bq=totS?totT/totS:0;
@@ -750,12 +753,13 @@ async function nickStatusRecs(){if(NICKST!==undefined)return NICKST;
 /* ===== PVH4: giá vốn bình quân GIA QUYỀN theo tháng — Robux (loại nick dồn: Thành tiền = 0) ===== */
 function parseRobuxCost(rows){
  if(!rows||rows.length<2)return null;
- /* dò hàng tiêu đề theo TÊN cột — "Thành tiền" phải khớp tuyệt đối để không dính
-    "Thành tiền dùng" / "Thành Tiền dồn & Die" */
+ /* dò hàng tiêu đề theo TÊN cột — chuẩn hoá NFC + NBSP vì tiêu đề gõ tay hay lẫn
+    khoảng trắng cứng/unicode tổ hợp; "Thành tiền" loại trừ biến thể dùng/dồn/die */
+ const norm=x=>{try{x=(''+x).normalize('NFC');}catch(e){x=''+x;}return x.replace(/\u00A0/g,' ').trim().toLowerCase();};
  let H=-1,iSL=-1,iTien=-1,iNgay=-1;
- for(let r=0;r<Math.min(rows.length,15);r++){const row=(rows[r]||[]).map(x=>(''+x).trim().toLowerCase());
-  const a=row.findIndex(x=>/số\s*lượng\s*robux/.test(x));
-  const b=row.findIndex(x=>x==='thành tiền');
+ for(let r=0;r<Math.min(rows.length,30);r++){const row=(rows[r]||[]).map(norm);
+  const a=row.findIndex(x=>/số\s*lượng\s*robux/.test(x)||(/số\s*lượng/.test(x)&&!/dùng|dồn/.test(x)));
+  const b=row.findIndex(x=>/thành\s*tiền/.test(x)&&!/dùng|dồn|die|&/.test(x));
   const c=row.findIndex(x=>/ngày/.test(x));
   if(a>-1&&b>-1&&c>-1){H=r;iSL=a;iTien=b;iNgay=c;break;}}
  if(H<0)return null;
@@ -766,10 +770,11 @@ function parseRobuxCost(rows){
   if(tien>0){const m=M[dt.mo];m.rows++;m.sl+=sl;m.tien+=tien;}
   else if(sl>0){const m=M[dt.mo];m.donRows++;m.donSl+=sl;} /* nick dồn/gom — chỉ để đối chiếu, KHÔNG tính GV */}
  return M.some(m=>m.tien>0)?M:null;}
-let COSTRB;
+let COSTRB,COSTRB_ROWS=null;
 async function robuxCostMonths(){if(COSTRB!==undefined)return COSTRB;
- let M=parseRobuxCost(await loadCSV(directURL(562469906)));
- if(!M)M=parseRobuxCost(await loadCSV(apiURL(562469906)));
+ let rows=await loadCSV(directURL(562469906));let M=parseRobuxCost(rows);
+ if(!M){const r2=await loadCSV(apiURL(562469906));if(r2)rows=r2;M=parseRobuxCost(r2);}
+ COSTRB_ROWS=rows?rows.slice(0,10):null; /* giữ 10 dòng đầu để chẩn đoán khi không dò được cột */
  COSTRB=M;return COSTRB;}
 function spinner(t){return '<div class="center"><div class="spin"></div>'+t+'</div>';}
 
