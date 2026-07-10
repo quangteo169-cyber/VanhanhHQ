@@ -194,9 +194,12 @@ const MFULL=["Tháng 01","Tháng 02","Tháng 03","Tháng 04","Tháng 05","Tháng
 function monIdx(t){t=(''+t).trim();let m=t.match(/th[aá]ng\s*(\d{1,2})/i);if(m)return +m[1]-1;m=t.match(/^(\d{1,2})\/(\d{4})$/);if(m)return +m[1]-1;m=t.match(/^(\d{4})[-\/](\d{1,2})[-\/]\d{1,2}/);if(m)return +m[2]-1;m=t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);if(m)return +m[2]-1;m=t.match(/^T(\d{1,2})$/i);if(m)return +m[1]-1;return -1;}
 /* Tên SPDV chuẩn hoá — chấp nhận biến thể (Token = "Item (Token)") */
 function canonSP(x){x=(''+x).trim();if(SPDV.includes(x))return x;
- const n=x.toLowerCase().replace(/\s+/g,' ');if(n==='token'||n==='item (token)')return 'Token';
- if(n==='rbx daily')return 'RBX Daily';if(n==='rbx hqs')return 'RBX HQS';if(n==='supercell')return 'Supercell';
- if(n==='rbx')return 'RBX'; /* khối "RBX" gộp cũ — nhận diện để không lẫn thành tên NCC, nhưng không nằm trong SPDV nên không cộng trùng */
+ const n=x.toLowerCase().replace(/\s+/g,' ');
+ const hit=SPDV.find(s=>s.toLowerCase()===n);if(hit)return hit; /* khớp không phân biệt hoa thường */
+ if(n==='token'||n==='item (token)')return 'Token';
+ if(n==='rbx daily')return 'RBX Daily';if(n==='rbx hqs')return 'RBX HQS';
+ if(n==='razergold')return 'Razer Gold';if(n==='giftcard')return 'Gift Card';if(n==='top up')return 'Topup';
+ if(n==='rbx')return 'RBX'; /* khối "RBX" gộp (tab NCC vẫn dùng) — hiển thị ở báo cáo NCC, không cộng vào SPDV tháng */
  return null;}
 /* Dò hàng tiêu đề tháng: hàng nào có >=3 ô là "Tháng 01"/"T01"/"01/2026"… thì lấy map tháng→cột */
 function monthCols(rows){for(let r=0;r<Math.min(rows.length,25);r++){const row=rows[r]||[];const m={};let n=0;
@@ -252,11 +255,17 @@ function parseNCC(rows){
   if(row.some(x=>reXuat.test(''+x))){sec='xuat';cur=null;continue;}
   if(row.some(x=>reTh.test(''+x))){sec='th';cur=null;continue;}
   const sp=canonSP(row[spCol]);
-  if(sp){cur=(sec==='nhap')?sp:null;if(cur){if(!data[cur])data[cur]=[];if(!hdr[cur])hdr[cur]=row;/* hàng tổng của khối — để đối soát */}continue;}
+  if(sp){cur=(sec==='nhap')?sp:null;
+   if(cur){if(!data[cur])data[cur]=[];
+    const hn=(''+(row[spCol+1]||'')).trim();
+    if(hn&&hn.toLowerCase()!=='nan'&&!/^tổng/i.test(hn)&&!/danh mục/i.test(hn)&&!/^%/.test(hn))
+     data[cur].push({name:hn,row}); /* NCC đầu tiên nằm NGAY hàng mở khối (khối 1 NCC như Razer Gold — Bee) */
+    else if(!hdr[cur])hdr[cur]=row; /* hàng mở khối không có tên NCC = hàng tổng của khối — dùng đối soát */
+   }continue;}
   if(!cur)continue;
   /* tên NCC thật nằm ở cột kế bên phải cột SPDV (cột SPDV còn chứa danh mục phụ cũ) */
   let ncc=(''+(row[spCol+1]||'')).trim();if(!ncc)ncc=(''+(row[spCol]||'')).trim();
-  if(ncc&&ncc.toLowerCase()!=='nan'&&!/^tổng/i.test(ncc)&&!/danh mục/i.test(ncc))data[cur].push({name:ncc,row});}
+  if(ncc&&ncc.toLowerCase()!=='nan'&&!/^tổng/i.test(ncc)&&!/danh mục/i.test(ncc)&&!/^%/.test(ncc))data[cur].push({name:ncc,row});}
  return {data,col,spCol,hdr};}
 /* validator: nguồn đọc về phải parse ra số thật thì mới nhận (không thì thử nguồn kia) */
 const VAL_SPDV=rows=>{try{const P=parseSPDV(rows);return SPDV.some(sp=>{for(let i=0;i<12;i++)if(P.val(P.nhap,sp,i)>0)return true;return false;});}catch(e){return false;}};
@@ -366,7 +375,7 @@ const PAGES={
    mk("tq3",donut(ST,ST.map(s=>sc.nhap[s]),ST.map(s=>SPCOL[s])));
    mk("tq4",stackCfg(lbl,dss(DIE)));
  }},
- PVH1:{title:"PVH1 · Dồn & Die theo SPDV",meta:"Tần suất: Tháng/Tuần/Ngày",render(host){
+ PVH2:{title:"PVH2 · Dồn & Die theo SPDV",meta:"Tần suất: Tháng/Tuần/Ngày",render(host){
    const sc=scopeData();const dieT=sc.totalDie;
    host.innerHTML=`<div class="kpis">
      ${kpi("Tổng Die / Thiệt hại",fmt(dieT),scopeLabel())}
@@ -382,8 +391,10 @@ const PAGES={
    const trDon=trend(m=>DON.Robux[m],999);
    mk("p1c",{type:'bar',data:{labels:trDon.labels,datasets:[{data:trDon.values,backgroundColor:GREEN,borderRadius:2}]},options:barOpt(false)});
  }},
- PVH2:{title:"PVH2 · NXT theo NCC (phân theo SPDV)",meta:"Nguồn: Data theo NCC (theo tháng)",render(host){
-   const touched=Object.keys(monthsInRange()).map(Number);const src=NCC_ALL;const sps=SPDV.filter(s=>src[s]&&src[s].length);
+ PVH1:{title:"PVH1 · NXT theo NCC (phân theo SPDV)",meta:"Nguồn: Data theo NCC (theo tháng)",render(host){
+   const touched=Object.keys(monthsInRange()).map(Number);const src=NCC_ALL;
+   /* hiển thị theo đúng thứ tự khối trên sheet — gồm cả RBX/Topup và khối mới sau này */
+   const sps=Object.keys(src).filter(s=>src[s]&&src[s].length);
    if(!sps.length){
      if(window.__nccFailed){
        const sample=window.__nccRows||[];
@@ -396,7 +407,7 @@ const PAGES={
           window.__nccDiag='đọc được '+rows.length+' dòng · nhận diện '+nsp+' khối SPDV · cột tháng: '+(monthCols(rows)?'tự dò được':'dùng mặc định');
           applyLive(null,rows);}
         else window.__nccDiag='không đọc được — cả link Google trực tiếp lẫn /api/csv đều lỗi/không đúng cấu trúc';
-        window.__nccLoading=0;window.__nccFailed=!Object.keys(NCC_ALL).length;if(curr==='PVH2')render();}).catch(e=>{window.__nccDiag='Lỗi fetch: '+(e&&e.message?e.message:e);window.__nccLoading=0;window.__nccFailed=1;if(curr==='PVH2')render();});}
+        window.__nccLoading=0;window.__nccFailed=!Object.keys(NCC_ALL).length;if(curr==='PVH1')render();}).catch(e=>{window.__nccDiag='Lỗi fetch: '+(e&&e.message?e.message:e);window.__nccLoading=0;window.__nccFailed=1;if(curr==='PVH1')render();});}
      return;}
    const tmn=touched.slice().sort((a,b)=>a-b);
    /* gom số một lần: dùng cho cả ô KPI tổng ở trên lẫn card chi tiết ở dưới */
@@ -404,7 +415,7 @@ const PAGES={
    sps.forEach(sp=>{const list=src[sp].map(x=>[x[0],tmn.reduce((a,mi)=>a+(x[1][mi]||0),0),x[1]]).filter(x=>x[1]>0).sort((a,b)=>b[1]-a[1]);
      agg[sp]={list,tot:list.reduce((a,x)=>a+x[1],0)};});
    let h=`<div class="small" style="margin-bottom:10px">Phạm vi ${scopeLabel()} · CO theo NCC (cộng trọn tháng chạm khoảng: ${tmn.map(m=>'T'+(m+1)).join('+')}) · ${sps.length} SPDV · bấm <b>Cả kỳ</b> để khớp cột "2026"</div>`;
-   h+=`<div class="kpis">${sps.map(sp=>kpi('Tổng CO Nhập · '+sp,fmt(agg[sp].tot),agg[sp].list.length+' NCC · top: '+(agg[sp].list[0]?agg[sp].list[0][0]:'—'))).join('')}</div>`;
+   h+=`<div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr))">${sps.map(sp=>kpi('Tổng CO Nhập · '+sp,fmt(agg[sp].tot),agg[sp].list.length+' NCC · top: '+(agg[sp].list[0]?agg[sp].list[0][0]:'—'))).join('')}</div>`;
    h+='<div class="grid2">';
    sps.forEach((sp,idx)=>{
      const list=agg[sp].list;
