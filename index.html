@@ -542,24 +542,47 @@ const PAGES={
        mk("p12b",{type:'bar',data:{labels:MN,datasets:[{label:'DIE',data:dieM,backgroundColor:RED},{label:'Hoàn tiền',data:hoanM,backgroundColor:'#fbbf24'}]},options:barOpt(true)});}
    });
  }},
- PVH4:{title:"PVH4 · Biến động giá vốn theo tháng",meta:"Giá vốn = đơn giá bình quân các lô nhập trong tháng (VND)",render(host){
-   host.innerHTML=spinner("Đang tải giá vốn theo tháng (Robux · Nick · Gift Card · Razer)…");
-   ensureRaw(['robux','nick','gc','razer']).then(()=>{
-     const M={robux:'Robux',nick:'Nick Random Roblox',gc:'Gift Card',razer:'Razer Gold'};const KS=Object.keys(M);
-     const series={};let any=false;
-     KS.forEach(k=>{const v=monthlyAvgUnit(k);series[k]=v;if(v.some(x=>x>0))any=true;});
-     if(!any){host.innerHTML='<div class="note"><b>Không đọc được dữ liệu raw từ Google Sheet</b> (cả link trực tiếp lẫn /api/csv). Kiểm tra ở trang <b>Nguồn &amp; Cấu hình</b>.</div>';return;}
-     let h='<div class="small" style="margin-bottom:10px">Giá vốn BQ = trung bình đơn giá các lô nhập trong tháng · nguồn USD quy về VND theo Bảng tỉ giá · cả kỳ T01–T06 (không phụ thuộc bộ lọc ngày)</div><div class="grid2">';
-     KS.forEach((k,idx)=>{const v=series[k];const ms=MN.map((_,i)=>i).filter(i=>v[i]>0);
-       const last=ms.length?v[ms[ms.length-1]]:0;const prev=ms.length>1?v[ms[ms.length-2]]:0;const d=prev?last/prev-1:0;
-       h+=`<div class="card"><h3>${M[k]} — giá vốn BQ theo tháng</h3><div class="chartbox sm"><canvas id="p4_${idx}"></canvas></div>
-        <div class="scroll" style="max-height:150px;margin-top:8px"><table class="tbl"><thead><tr><th>Tháng</th><th class="n">Giá vốn BQ</th><th class="n">± so tháng trước</th></tr></thead><tbody>
-        ${ms.map((mi,j)=>{const pv=j>0?v[ms[j-1]]:0;const dd=pv?v[mi]/pv-1:0;return `<tr><td>${MN[mi]}</td><td class="n">${fmtn(v[mi])}</td><td class="n"><span class="${cls(dd)}">${j>0?arrow(dd)+pct(Math.abs(dd)):'—'}</span></td></tr>`;}).join('')||'<tr><td colspan="3">Chưa có dữ liệu</td></tr>'}</tbody></table></div>
-        <div class="small" style="margin-top:6px">Tháng gần nhất: <b>${fmtn(last)}</b> <span class="${cls(d)}">${prev?arrow(d)+pct(Math.abs(d))+' so tháng trước':''}</span></div></div>`;});
-     h+='</div>';host.innerHTML=h;
-     KS.forEach((k,idx)=>{const v=series[k];
-       mk('p4_'+idx,{type:'line',data:{labels:MN,datasets:[{data:v.map(x=>x||null),borderColor:'#1e5fd0',backgroundColor:'rgba(37,99,235,.14)',fill:true,borderWidth:2,tension:.3,pointRadius:4,spanGaps:true}]},
-        options:{plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>'Giá vốn BQ: '+fmt(c.parsed.y)}}},scales:{x:noX,y:{...yG,ticks:{callback:fmtAxis}}}}});});
+ PVH4:{title:"PVH4 · Biến động giá vốn theo tháng — Robux",meta:"GV ĐV = Σ Thành tiền ÷ Σ SL (bình quân GIA QUYỀN, loại nick dồn tiền = 0) · cả kỳ, không phụ thuộc bộ lọc ngày",render(host){
+   host.innerHTML=spinner("Đang đọc Data Robux và tính giá vốn gia quyền…");
+   robuxCostMonths().then(M=>{
+     if(!M){host.innerHTML='<div class="note"><b>Không đọc được Data Robux</b> (gid 562469906) — cần các cột "Số lượng robux", "Thành tiền", "Ngày…". Kiểm tra ở trang <b>Nguồn &amp; Cấu hình</b>.</div>';return;}
+     const fmt2=n=>n.toLocaleString('vi-VN',{minimumFractionDigits:2,maximumFractionDigits:2});
+     const ms=M.map((m,i)=>({mi:i,rows:m.rows,sl:m.sl,tien:m.tien,donSl:m.donSl,gv:m.sl>0?m.tien/m.sl:0})).filter(m=>m.tien>0);
+     const totT=ms.reduce((a,m)=>a+m.tien,0),totS=ms.reduce((a,m)=>a+m.sl,0),bq=totS?totT/totS:0;
+     const totDon=M.reduce((a,m)=>a+m.donSl,0),totDonRows=M.reduce((a,m)=>a+m.donRows,0);
+     const last=ms[ms.length-1],prev=ms.length>1?ms[ms.length-2]:null;
+     const mom=prev?(last.gv-prev.gv)/prev.gv:0;
+     const hi=ms.reduce((a,m)=>m.gv>a.gv?m:a,ms[0]),lo=ms.reduce((a,m)=>m.gv<a.gv?m:a,ms[0]);
+     host.innerHTML=`
+      <div class="kpis" style="grid-template-columns:repeat(5,1fr)">
+       ${kpi("GV tháng gần nhất — T"+pad2(last.mi+1),fmt2(last.gv),prev?`<span class="${cls(mom)}">${arrow(mom)}${pct(Math.abs(mom))} so T${pad2(prev.mi+1)}</span>`:'đ/robux')}
+       ${kpi("BQ năm (gia quyền)",fmt2(bq),"Σ tiền ÷ Σ SL — không phải TB cộng tháng")}
+       ${kpi("Đỉnh · Đáy","T"+pad2(hi.mi+1)+" "+fmt2(hi.gv)+" · T"+pad2(lo.mi+1)+" "+fmt2(lo.gv),"đ/robux")}
+       ${kpi("Tổng mua cả kỳ",fmt(totT),fmt(totS)+" robux · "+fmt(ms.reduce((a,m)=>a+m.rows,0))+" dòng mua")}
+       ${kpi("Nick dồn đã loại",fmt(totDon)+" rb",totDonRows+" dòng tiền = 0 — không tính vào GV")}
+      </div>
+      <div class="grid2" style="grid-template-columns:1.5fr 1fr">
+       ${cc("Giá vốn ĐV theo tháng (đ/robux) — đường đứt: BQ năm · cột: %MoM (đỏ đắt lên, xanh rẻ đi)","p4a")}
+       <div class="card"><h3>Công thức (đã chốt)</h3><div class="note" style="background:#f4f8ff;color:#1c2c4a;border-left-color:#1e5fd0;line-height:1.9">
+        <b>GV ĐV(t)</b> = Σ Thành tiền ÷ Σ SL robux — chỉ dòng <b>tiền &gt; 0</b> (tự loại nick dồn giá 0)<br>
+        <b>BQ năm</b> = Σ tiền ÷ Σ SL (gia quyền)<br>
+        <b>Δ MoM</b> = GV(t) − GV(t−1) · <b>%MoM</b> = Δ ÷ GV(t−1)<br>
+        <b>So BQ</b> = GV(t) ÷ BQ năm (100% = bằng bình quân)</div>
+        <div class="small" style="margin-top:8px">Gift Card nhiều SKU/mệnh giá — không tính gộp (biến động chỉ phản ánh mix, không phải giá). Razer Gold sẽ nối cùng công thức khi chốt cột nguồn.</div></div>
+      </div>
+      <div class="card"><h3>Chi tiết dữ liệu tính giá vốn — đã loại nick dồn</h3><div class="scroll"><table class="tbl"><thead><tr><th>Tháng</th><th class="n">Dòng mua</th><th class="n">SL nhập (mua)</th><th class="n">Thành tiền (mua)</th><th class="n">GV ĐV (đ/robux)</th><th class="n">Δ MoM</th><th class="n">%MoM</th><th class="n">So BQ năm</th><th class="n">SL dồn (loại)</th></tr></thead><tbody>
+      ${ms.map((m,j)=>{const pv=j>0?ms[j-1]:null;const d=pv?m.gv-pv.gv:null;const p=pv?d/pv.gv:null;
+        return `<tr><td>T${pad2(m.mi+1)}</td><td class="n">${fmt(m.rows)}</td><td class="n">${fmt(m.sl)}</td><td class="n">${fmt(m.tien)}</td><td class="n"><b>${fmt2(m.gv)}</b></td><td class="n">${d==null?'—':(d>0?'+':'−')+fmt2(Math.abs(d))}</td><td class="n"><span class="${d==null?'flat':cls(d)}">${p==null?'—':(p>0?'+':'−')+(Math.abs(p)*100).toFixed(1)+'%'}</span></td><td class="n">${(m.gv/(bq||1)*100).toFixed(1)}%</td><td class="n">${fmtn(m.donSl)}</td></tr>`;}).join('')}
+      <tr style="font-weight:bold;background:#eef4ff"><td>TỔNG</td><td class="n">${fmt(ms.reduce((a,m)=>a+m.rows,0))}</td><td class="n">${fmt(totS)}</td><td class="n">${fmt(totT)}</td><td class="n">${fmt2(bq)}</td><td class="n">—</td><td class="n">—</td><td class="n">100%</td><td class="n">${fmt(totDon)}</td></tr>
+      </tbody></table></div></div>`;
+     const labels=ms.map(m=>'T'+pad2(m.mi+1));
+     const momv=ms.map((m,j)=>j>0?+(((m.gv-ms[j-1].gv)/ms[j-1].gv)*100).toFixed(2):null);
+     mk("p4a",{type:'bar',data:{labels,datasets:[
+       {type:'line',label:'GV ĐV (đ/robux)',data:ms.map(m=>+m.gv.toFixed(2)),yAxisID:'y',borderColor:'#0e9fbe',backgroundColor:'rgba(34,211,238,.15)',borderWidth:2.5,tension:.3,pointRadius:4},
+       {type:'line',label:'BQ năm',data:ms.map(()=>+bq.toFixed(2)),yAxisID:'y',borderColor:'#0b3a8f',borderDash:[6,5],borderWidth:1.5,pointRadius:0},
+       {label:'%MoM',data:momv,yAxisID:'y2',backgroundColor:momv.map(v=>v==null?'#94a3b8':(v>0?'rgba(244,63,94,.65)':'rgba(52,211,153,.7)')),borderRadius:2}
+     ]},options:{plugins:{legend:{display:true,position:'top',labels:{boxWidth:10}},tooltip:{callbacks:{label:c=>c.dataset.label+': '+(c.dataset.yAxisID==='y2'?(c.parsed.y==null?'—':c.parsed.y+'%'):fmt2(c.parsed.y)+' đ')}}},
+      scales:{x:noX,y:{...yG},y2:{position:'right',grid:{display:false},ticks:{callback:v=>v+'%'}}}}});
    });
  }},
  PVH5:{title:"PVH5 · Biến động giá vốn theo NCC (mỗi SPDV 1 mục)",meta:"Nguồn raw: Robux · Nick · Gift Card",render(host){
@@ -724,6 +747,30 @@ async function nickStatusRecs(){if(NICKST!==undefined)return NICKST;
  let recs=nickStatusFromRows(await loadCSV(directURL(RAWCFG.nick.gid)));
  if(!recs)recs=nickStatusFromRows(await loadCSV(apiURL(RAWCFG.nick.gid)));
  NICKST=recs;return NICKST;}
+/* ===== PVH4: giá vốn bình quân GIA QUYỀN theo tháng — Robux (loại nick dồn: Thành tiền = 0) ===== */
+function parseRobuxCost(rows){
+ if(!rows||rows.length<2)return null;
+ /* dò hàng tiêu đề theo TÊN cột — "Thành tiền" phải khớp tuyệt đối để không dính
+    "Thành tiền dùng" / "Thành Tiền dồn & Die" */
+ let H=-1,iSL=-1,iTien=-1,iNgay=-1;
+ for(let r=0;r<Math.min(rows.length,15);r++){const row=(rows[r]||[]).map(x=>(''+x).trim().toLowerCase());
+  const a=row.findIndex(x=>/số\s*lượng\s*robux/.test(x));
+  const b=row.findIndex(x=>x==='thành tiền');
+  const c=row.findIndex(x=>/ngày/.test(x));
+  if(a>-1&&b>-1&&c>-1){H=r;iSL=a;iTien=b;iNgay=c;break;}}
+ if(H<0)return null;
+ const M=Array.from({length:12},()=>({rows:0,sl:0,tien:0,donRows:0,donSl:0}));
+ for(let r=H+1;r<rows.length;r++){const row=rows[r];if(!row)continue;
+  const dt=parseDateCell(row[iNgay]);if(!dt||dt.mo<0||dt.mo>11)continue;
+  const sl=num(row[iSL]),tien=num(row[iTien]);
+  if(tien>0){const m=M[dt.mo];m.rows++;m.sl+=sl;m.tien+=tien;}
+  else if(sl>0){const m=M[dt.mo];m.donRows++;m.donSl+=sl;} /* nick dồn/gom — chỉ để đối chiếu, KHÔNG tính GV */}
+ return M.some(m=>m.tien>0)?M:null;}
+let COSTRB;
+async function robuxCostMonths(){if(COSTRB!==undefined)return COSTRB;
+ let M=parseRobuxCost(await loadCSV(directURL(562469906)));
+ if(!M)M=parseRobuxCost(await loadCSV(apiURL(562469906)));
+ COSTRB=M;return COSTRB;}
 function spinner(t){return '<div class="center"><div class="spin"></div>'+t+'</div>';}
 
 /* ===== ROUTER ===== */
