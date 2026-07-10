@@ -247,6 +247,7 @@ function parseNCC(rows){
  if(spCol<0)spCol=2;
  const col=monthCols(rows)||{0:spCol+3,1:spCol+4,2:spCol+5,3:spCol+6,4:spCol+7,5:spCol+8,6:spCol+9,7:spCol+10,8:spCol+11,9:spCol+12,10:spCol+13,11:spCol+14};
  const reNhap=/tổng\s*co\s*nhập/i,reXuat=/tổng\s*co\s*xuất/i,reTh=/thiệt\s*hại/i;
+ const okName=n=>!!(n&&n.toLowerCase()!=='nan'&&!/^tổng/i.test(n)&&!/danh mục/i.test(n)&&!/^%/.test(n));
  let hasSec=false;
  for(let r=0;r<rows.length&&!hasSec;r++){if((rows[r]||[]).some(x=>reNhap.test(''+x)))hasSec=true;}
  const data={},hdr={};let cur=null,sec=hasSec?null:'nhap';
@@ -255,17 +256,17 @@ function parseNCC(rows){
   if(row.some(x=>reXuat.test(''+x))){sec='xuat';cur=null;continue;}
   if(row.some(x=>reTh.test(''+x))){sec='th';cur=null;continue;}
   const sp=canonSP(row[spCol]);
-  if(sp){cur=(sec==='nhap')?sp:null;
-   if(cur){if(!data[cur])data[cur]=[];
-    const hn=(''+(row[spCol+1]||'')).trim();
-    if(hn&&hn.toLowerCase()!=='nan'&&!/^tổng/i.test(hn)&&!/danh mục/i.test(hn)&&!/^%/.test(hn))
-     data[cur].push({name:hn,row}); /* NCC đầu tiên nằm NGAY hàng mở khối (khối 1 NCC như Razer Gold — Bee) */
-    else if(!hdr[cur])hdr[cur]=row; /* hàng mở khối không có tên NCC = hàng tổng của khối — dùng đối soát */
-   }continue;}
+  const nm=(''+(row[spCol+1]||'')).trim();
+  /* Hàng MỞ KHỐI = tên SPDV ở cột nhãn VÀ cột NCC kế bên TRỐNG (chính là hàng tổng của khối).
+     Cột nhãn còn sót nhãn cũ có thể TRÙNG tên SPDV (vd nhãn cũ "Razer Gold" nằm ngay hàng
+     SEAGM API giữa khối Gift Card) — hàng có tên NCC thật ở cột kế thì KHÔNG mở khối mới. */
+  if(sp&&!okName(nm)){cur=(sec==='nhap')?sp:null;
+   if(cur){if(!data[cur])data[cur]=[];if(!hdr[cur])hdr[cur]=row;}continue;}
   if(!cur)continue;
-  /* tên NCC thật nằm ở cột kế bên phải cột SPDV (cột SPDV còn chứa danh mục phụ cũ) */
-  let ncc=(''+(row[spCol+1]||'')).trim();if(!ncc)ncc=(''+(row[spCol]||'')).trim();
-  if(ncc&&ncc.toLowerCase()!=='nan'&&!/^tổng/i.test(ncc)&&!/danh mục/i.test(ncc)&&!/^%/.test(ncc))data[cur].push({name:ncc,row});}
+  /* tên NCC thật ở cột kế bên phải cột nhãn (kể cả khi trùng tên SPDV như "Supercell" trong
+     khối Topup); cột kế trống thì mới dùng cột nhãn */
+  const ncc=okName(nm)?nm:(''+(row[spCol]||'')).trim();
+  if(okName(ncc))data[cur].push({name:ncc,row});}
  return {data,col,spCol,hdr};}
 /* validator: nguồn đọc về phải parse ra số thật thì mới nhận (không thì thử nguồn kia) */
 const VAL_SPDV=rows=>{try{const P=parseSPDV(rows);return SPDV.some(sp=>{for(let i=0;i<12;i++)if(P.val(P.nhap,sp,i)>0)return true;return false;});}catch(e){return false;}};
