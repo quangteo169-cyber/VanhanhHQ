@@ -36,6 +36,8 @@ body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;opa
 .logo{width:40px;height:40px;border-radius:11px;background:linear-gradient(135deg,var(--cyan),var(--violet));display:flex;align-items:center;justify-content:center;font-weight:bold;color:#07101f;box-shadow:0 0 18px rgba(34,211,238,.55)}
 .brand b{font-size:14px;background:linear-gradient(90deg,#7fe9ff,#7cc4f7);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
 .brand small{display:block;font-size:10px;color:#8aa0bd}
+.lgout{margin-left:auto;flex:0 0 auto;width:30px;height:30px;border-radius:8px;border:1px solid rgba(120,180,255,.25);background:transparent;color:#8aa0bd;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:color .15s,border-color .15s,background .15s}
+.lgout:hover{color:#fb7185;border-color:rgba(251,113,133,.55);background:rgba(251,113,133,.1)}
 .tier{font-size:10px;color:#6f8bb0;text-transform:uppercase;letter-spacing:.8px;margin:15px 8px 6px;font-weight:bold}
 .nav{display:flex;gap:9px;align-items:center;padding:9px;border-radius:10px;cursor:pointer;font-size:12.5px;color:#c3d4ec;transition:.15s;border:1px solid transparent}
 .nav:hover{background:rgba(120,170,255,.09);border-color:rgba(120,180,255,.14)}
@@ -187,7 +189,7 @@ select:focus{outline:none;border-color:var(--cyan);box-shadow:0 0 10px rgba(34,2
 <div class="layout">
   <div id="mask" onclick="toggleMenu(false)"></div>
   <div class="side">
-    <div class="brand"><div class="logo">HQ</div><div><b>Trung tâm Báo cáo PVH</b><small>Realtime Google Sheet · v3</small></div></div>
+    <div class="brand"><div class="logo">HQ</div><div style="flex:1;min-width:0"><b>Trung tâm Báo cáo PVH</b><small>Realtime Google Sheet · v3</small></div><button class="lgout" onclick="doLogout()" title="Đăng xuất" aria-label="Đăng xuất"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 3v9"/><path d="M6.2 5.6a8 8 0 1 0 11.6 0"/></svg></button></div>
     <div class="nav big" data-id="TQ" onclick="go('TQ')"><span class="code">◆</span><span class="dot" style="color:#22d3ee;background:#22d3ee"></span><span><b>Tổng quan</b> (lọc N/T/N)</span></div>
     <div id="nav"></div>
     <div class="tier">Hệ thống</div>
@@ -218,6 +220,10 @@ async function sha256(t){const b=await crypto.subtle.digest('SHA-256',new TextEn
 async function doLogin(){const em=(document.getElementById('lgEmail').value||'').trim().toLowerCase();const pw=document.getElementById('lgPass').value||'';let h='';try{h=await sha256(pw);}catch(e){document.getElementById('lgErr').textContent="Trình duyệt chặn mã hoá (hãy mở qua https/Vercel).";return;}
  if(em===AUTH_EMAIL&&h===AUTH_HASH){MY_EMAIL=em;MY_ROLE='admin';MY_PAGES=ALL_PAGES.slice();try{sessionStorage.setItem('pvh_auth','1');sessionStorage.setItem('pvh_user',em);sessionStorage.setItem('pvh_role','admin');sessionStorage.setItem('pvh_pages',JSON.stringify(MY_PAGES));sessionStorage.removeItem('pvh_idtoken');}catch(e){}showApp();}
  else document.getElementById('lgErr').textContent="Email hoặc mật khẩu không đúng.";}
+function doLogout(){
+ try{['pvh_auth','pvh_user','pvh_role','pvh_pages','pvh_idtoken'].forEach(k=>sessionStorage.removeItem(k));}catch(e){}
+ try{if(window.google&&google.accounts&&google.accounts.id)google.accounts.id.disableAutoSelect();}catch(e){}
+ location.reload();}
 function showApp(){const l=document.getElementById('login');if(l)l.style.display='none';
  try{const u=sessionStorage.getItem('pvh_user');const b=document.querySelector('.brand small');if(u&&b)b.textContent=u+' · '+(ROLE_LABEL[MY_ROLE]||MY_ROLE||'');}catch(e){}
  if(!window.__started){window.__started=true;startApp();}}
