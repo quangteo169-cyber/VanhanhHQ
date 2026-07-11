@@ -95,6 +95,25 @@ select:focus{outline:none;border-color:var(--cyan);box-shadow:0 0 10px rgba(34,2
 .center{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:50px;color:#9fb4d3;gap:12px}
 .spin{width:26px;height:26px;border:3px solid rgba(120,180,255,.25);border-top-color:#22d3ee;border-radius:50%;animation:spin .8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
+
+/* ===== Trang Nguồn & Cấu hình (SRC) ===== */
+.sechead{display:flex;align-items:center;gap:8px;margin:2px 0 12px;font-weight:800;color:#1c2c4a;font-size:13.5px}
+.sechead .sq{width:9px;height:9px;border-radius:3px;box-shadow:0 0 8px rgba(30,95,208,.45)}
+.sechead .cnt{margin-left:auto;font-size:11px;color:#7d92b0;font-weight:600}
+.avt{width:30px;height:30px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:11px;color:#fff;flex:0 0 30px;letter-spacing:.5px}
+.usr{display:flex;align-items:center;gap:9px;min-width:0}
+.usr .em{font-weight:600;color:#132038;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.usr .tag{font-size:10.5px;color:#7d92b0}
+.strip{display:flex;align-items:center;gap:10px;padding:8px 12px;border:1px solid #f0e3c8;background:linear-gradient(160deg,#fffaf0,#fdf3dd);border-radius:10px;margin-bottom:8px;flex-wrap:wrap}
+.stdot{display:inline-block;width:9px;height:9px;border-radius:50%;flex:0 0 9px;vertical-align:middle}
+.stdot.ok{background:#22c55e;box-shadow:0 0 4px rgba(34,197,94,.45)}
+.stdot.warn{background:#f59e0b;box-shadow:0 0 4px rgba(245,158,11,.45)}
+.stdot.bad{background:#f43f5e;box-shadow:0 0 4px rgba(244,63,94,.45)}
+.srcpill{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:14px;font-size:11px;font-weight:700;white-space:nowrap}
+.gidm{font-family:Consolas,"Roboto Mono",monospace;font-size:11px;color:#8aa0bd}
+.tbl tbody tr:hover td{background:#eef4fd}
+.tbl tr.grp td{background:#f2f6fc!important;font-weight:800;color:#0b3a8f;font-size:11px;text-transform:uppercase;letter-spacing:.5px;padding:6px 10px}
+.rolebadge{display:inline-block;padding:3px 10px;border-radius:14px;font-size:11px;font-weight:700;color:#fff}
 /* dropdown tick chọn báo cáo (mục Quản lý đăng nhập) */
 .pgpick{display:inline-block}
 .pgpick>summary{list-style:none;cursor:pointer;border:1px solid #c9d6ea;border-radius:7px;padding:6px 10px;font-size:12px;background:#fff;color:#1c2c4a;min-width:200px;max-width:240px;display:flex;justify-content:space-between;gap:8px;align-items:center}
@@ -1158,8 +1177,15 @@ function buildNav(){let h='';TIERS.forEach(([t,label,ids])=>{const vis=ids.filte
  const tierSys=src?src.previousElementSibling:null;if(tierSys&&tierSys.classList.contains('tier'))tierSys.style.display=canSee('SRC')?'':'none';}
 function permPanel(){
  if(MY_ROLE!=='admin')return '';
- return `<div class="card" style="margin-bottom:14px"><h3 style="text-align:left">Quản lý đăng nhập &amp; phân quyền · <span class="small">Admin cứng: ${SUPER_ADMIN}</span></h3>
+ return `<div class="card" style="margin-bottom:14px">
+  <div class="sechead"><span class="sq" style="background:#1e5fd0"></span>Quản lý đăng nhập &amp; phân quyền<span class="cnt">Admin cứng: ${SUPER_ADMIN}</span></div>
   <div id="permbox">${spinner("Đang tải danh sách tài khoản…")}</div></div>`;}
+/* avatar chữ cái đầu, màu ổn định theo email */
+const AVC=['#0b3a8f','#1e5fd0','#2e86e6','#0e7c86','#7c3aed','#b45309','#be185d','#15803d'];
+function avat(e){let s=0;for(let i=0;i<e.length;i++)s=(s*31+e.charCodeAt(i))>>>0;
+ const ini=(e.split('@')[0].replace(/[^a-z0-9]/gi,'').slice(0,2)||'?').toUpperCase();
+ return `<span class="avt" style="background:${AVC[s%AVC.length]}">${ini}</span>`;}
+function roleBadge(r){return `<span class="rolebadge" style="background:${_roleBg(r)}">${(ROLE_LABEL[r]||r).replace(/\s*\(.*\)/,'')}</span>`;}
 let _acl={users:{},pending:[]};
 const _roleBg=r=>r==='admin'?'#0b3a8f':(r==='leader'?'#1e5fd0':'#4aa8f0');
 function _roleSel(id,cur){return `<select id="${id}" style="padding:5px 8px">${['admin','leader','nhanvien'].map(x=>`<option value="${x}"${x===cur?' selected':''}>${ROLE_LABEL[x]}</option>`).join('')}</select>`;}
@@ -1189,22 +1215,26 @@ async function loadPermAdmin(){const box=document.getElementById('permbox');if(!
  const r=await aclSend('list');
  if(r.error){box.innerHTML=`<div class="note">${r.error==='kv_not_configured'?'<b>Kho tài khoản (Vercel KV) chưa cấu hình.</b> Tạo KV store trên Vercel rồi deploy lại.':(r.error==='forbidden'||r.error==='unauthorized'?'Phiên đăng nhập hết hạn hoặc bạn đăng nhập bằng mật khẩu (không có token Google). Hãy <b>đăng nhập lại bằng Google</b> để quản lý tài khoản.':'Không tải được danh sách: '+r.error)}</div>`;return;}
  _acl={users:r.users||{},pending:r.pending||[]};
+ const ue=Object.keys(_acl.users).sort();const pend=_acl.pending;
+ const ka=document.getElementById('k_acc');if(ka)ka.textContent=(ue.length+1)+' tài khoản';
+ const ks=document.getElementById('k_acc_sub');if(ks)ks.innerHTML=pend.length?`<span style="color:#fbbf24">● ${pend.length} chờ cấp quyền</span>`:'không có yêu cầu chờ';
  let h='';
- const pend=_acl.pending;
- h+=`<div class="row" style="margin-bottom:6px"><b style="color:${pend.length?'#b45309':'#5b6b7b'}">● Chờ cấp quyền (${pend.length})</b><span class="small">— email đăng nhập lần đầu chưa có tài khoản</span></div>`;
- if(!pend.length)h+='<div class="small" style="margin-bottom:12px">Chưa có tài khoản mới nào chờ duyệt.</div>';
- else{h+='<div class="scroll" style="max-height:220px;margin-bottom:14px"><table class="tbl"><thead><tr><th>Email</th><th>Vai trò</th><th>Báo cáo được xem</th><th></th></tr></thead><tbody>';
-  pend.forEach((e,i)=>{h+=`<tr><td>${e}</td><td>${_roleSel('prole'+i,'nhanvien')}</td><td>${_pgPicker('ppg'+i,null)}</td><td style="white-space:nowrap"><button class="btn" onclick="aclAssign('pending',${i})">✓ Cấp quyền</button> <button class="pbtn" onclick="aclDismiss('pending',${i})">Bỏ qua</button></td></tr>`;});
-  h+='</tbody></table></div>';}
- const ue=Object.keys(_acl.users).sort();
- h+=`<div class="row" style="margin-bottom:6px"><b>Tài khoản đã cấp quyền (${ue.length+1})</b></div>`;
- h+='<div class="scroll" style="max-height:320px"><table class="tbl"><thead><tr><th>Email</th><th>Vai trò</th><th>Báo cáo được xem</th><th></th></tr></thead><tbody>';
- h+=`<tr><td>${SUPER_ADMIN} <span class="small">(admin cứng)</span></td><td><span class="badge" style="background:#0b3a8f">Admin</span></td><td class="small">Tất cả + Cấu hình</td><td></td></tr>`;
+ if(pend.length){
+  h+=`<div class="sechead" style="margin-bottom:8px"><span class="sq" style="background:#f59e0b;box-shadow:0 0 8px rgba(245,158,11,.5)"></span>Chờ cấp quyền<span class="cnt">${pend.length} email đăng nhập lần đầu</span></div>`;
+  pend.forEach((e,i)=>{h+=`<div class="strip"><span class="stdot warn"></span><span class="usr">${avat(e)}<span><span class="em">${e}</span><br><span class="tag">đang chờ duyệt</span></span></span>
+   <span style="margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap">${_roleSel('prole'+i,'nhanvien')}${_pgPicker('ppg'+i,null)}
+   <button class="btn" onclick="aclAssign('pending',${i})">✓ Cấp quyền</button><button class="pbtn" onclick="aclDismiss('pending',${i})">Bỏ qua</button></span></div>`;});
+  h+='<div style="height:8px"></div>';}
+ h+=`<div class="sechead" style="margin-bottom:8px"><span class="sq" style="background:#22c55e;box-shadow:0 0 8px rgba(34,197,94,.5)"></span>Tài khoản đã cấp quyền<span class="cnt">${ue.length+1} tài khoản</span></div>`;
+ h+='<div class="scroll" style="max-height:340px"><table class="tbl"><thead><tr><th>Tài khoản</th><th>Vai trò</th><th>Báo cáo được xem</th><th style="width:150px"></th></tr></thead><tbody>';
+ h+=`<tr><td><span class="usr">${avat(SUPER_ADMIN)}<span><span class="em">${SUPER_ADMIN}</span><br><span class="tag">admin cứng — không thể thu hồi</span></span></span></td>
+  <td>${roleBadge('admin')}</td><td class="small">Tất cả báo cáo + Cấu hình</td><td></td></tr>`;
  ue.forEach((e,i)=>{const en=_acl.users[e];
-  h+=`<tr><td>${e}</td><td>${_roleSel('urole'+i,en.role)}</td><td>${_pgPicker('upg'+i,en.pages)}</td><td style="white-space:nowrap"><button class="btn" onclick="aclAssign('user',${i})">Lưu</button> <button class="pbtn" onclick="aclRemove('user',${i})">Thu hồi</button></td></tr>`;});
+  h+=`<tr><td><span class="usr">${avat(e)}<span><span class="em">${e}</span><br><span class="tag">${(ROLE_LABEL[en.role]||en.role)}</span></span></span></td>
+   <td>${_roleSel('urole'+i,en.role)}</td><td>${_pgPicker('upg'+i,en.pages)}</td>
+   <td style="white-space:nowrap"><button class="btn" onclick="aclAssign('user',${i})">Lưu</button> <button class="pbtn" onclick="aclRemove('user',${i})">Thu hồi</button></td></tr>`;});
  h+='</tbody></table></div>';
- h+=`<div class="small" style="margin-top:10px"><b>Cách dùng:</b> chọn vai trò, mở ô "Báo cáo được xem" để <b>tick</b> đúng báo cáo cho người đó (hoặc <b>ALL</b> = xem hết · để nguyên "Mặc định theo vai trò"), rồi bấm <b>Lưu / Cấp quyền</b>.</div>
-  <div class="small" style="margin-top:6px">Mặc định theo vai trò: <b>Admin</b> tất cả + Cấu hình · <b>Leader</b> ${ROLE_PAGES.leader.join(', ')} · <b>Nhân viên</b> ${ROLE_PAGES.nhanvien.join(', ')}.</div>`;
+ h+=`<div class="small" style="margin-top:10px"><b>Cách dùng:</b> chọn vai trò, mở ô "Báo cáo được xem" để <b>tick</b> đúng báo cáo cho người đó (hoặc <b>ALL</b> = xem hết · để nguyên "Mặc định theo vai trò"), rồi bấm <b>Lưu / Cấp quyền</b>. Mặc định vai trò: <b>Admin</b> tất cả + Cấu hình · <b>Leader</b> ${ROLE_PAGES.leader.join(', ')} · <b>Nhân viên</b> ${ROLE_PAGES.nhanvien.join(', ')}.</div>`;
  box.innerHTML=h;}
 async function aclAssign(kind,i){let email,role,pages;
  if(kind==='pending'){email=_acl.pending[i];role=document.getElementById('prole'+i).value;pages=_pgRead('ppg'+i);}
@@ -1216,18 +1246,53 @@ async function aclRemove(kind,i){const email=Object.keys(_acl.users).sort()[i];i
  const r=await aclSend('remove',{email});if(r.error){alert('Lỗi: '+r.error);return;}loadPermAdmin();}
 async function aclDismiss(kind,i){const email=_acl.pending[i];const r=await aclSend('dismiss',{email});if(r.error){alert('Lỗi: '+r.error);return;}loadPermAdmin();}
 function renderSRC(){const host=document.getElementById('content');
- const tests=[['Data theo SPDV','460836856'],['Data theo NCC','1758921427'],['Data Nhập Theo Nhân viên',GIDS.nv],['Bảng tỉ giá','163849763'],['Data Robux (cũ)','562469906'],['Data Robux — giá vốn PVH4','386815906'],['Data giftcard','1043029815'],['Data Razergold','1868031300'],['Data OGGAMING','793401472'],['Data Nick Roblox','61864847'],['Tồn kho — FILE RIÊNG (PVH6)','0','ton'],['SLA theo năm (PVH10)','1982526665','sla'],['SLA theo ngày/tháng (PVH10)','511745866','sla']];
- host.innerHTML=permPanel()+'<div class="card"><h3 style="text-align:left">Chẩn đoán nguồn dữ liệu — ưu tiên đọc TRỰC TIẾP Google Sheet, /api/csv là dự phòng</h3><div class="scroll"><table class="tbl" id="diag"><thead><tr><th>Tab</th><th>Google trực tiếp</th><th>/api/csv (dự phòng)</th><th class="n">Số dòng</th><th>Dòng đầu / lỗi</th></tr></thead><tbody></tbody></table></div><div class="small" style="margin-top:8px">Cần ít nhất 1 cột xanh cho mỗi tab. "Google trực tiếp" lỗi = tab chưa được Publish to web hoặc bị chặn CORS; "/api/csv" 404 = function Vercel chưa deploy.</div></div>';
+ /* nhóm tab theo file nguồn */
+ const groups=[
+  ['FILE CHÍNH — Google Sheet vận hành',[
+   ['Data theo SPDV','460836856'],['Data theo NCC','1758921427'],['Data Nhập Theo Nhân viên',GIDS.nv],['Bảng tỉ giá','163849763'],['Data Robux (cũ)','562469906'],['Data Robux — giá vốn PVH4','386815906'],['Data giftcard','1043029815'],['Data Razergold','1868031300'],['Data OGGAMING','793401472'],['Data Nick Roblox','61864847']]],
+  ['FILE TỒN KHO HUB (PVH6)',[['Tồn kho Gift Card','0','ton']]],
+  ['FILE NĂNG SUẤT XỬ LÝ ĐƠN (PVH10)',[['SLA theo năm','1982526665','sla'],['SLA theo ngày/tháng','511745866','sla']]]];
+ const nTests=groups.reduce((a,g)=>a+g[1].length,0);
+ host.innerHTML=
+  `<div class="kpis">
+    ${kpi("Nguồn dữ liệu",`<span id="k_tabs">…</span>`,nTests+" tab · 3 file Google Sheet")}
+    ${kpi("Cách đọc","Trực tiếp Google","publish CSV · /api/csv là dự phòng")}
+    ${kpi("Tài khoản",`<span id="k_acc">…</span>`,`<span id="k_acc_sub">đang tải…</span>`)}
+    ${kpi("Tự làm mới","60 giây","lần cuối "+new Date().toLocaleTimeString('vi-VN'))}
+   </div>`
+  +permPanel()
+  +`<div class="card"><div class="sechead"><span class="sq" style="background:#22d3ee"></span>Chẩn đoán nguồn dữ liệu<span class="cnt" id="diagsum">đang kiểm tra ${nTests} tab…</span></div>
+    <div class="scroll"><table class="tbl" id="diag"><thead><tr><th style="width:26px"></th><th>Tab</th><th>gid</th><th>Nguồn đọc được</th><th class="n">Số dòng</th><th>Dòng đầu / lỗi</th></tr></thead><tbody></tbody></table></div>
+    <div class="small" style="margin-top:12px;display:flex;gap:7px;align-items:center;flex-wrap:wrap">
+     <b style="color:#1c2c4a">Luồng dữ liệu:</b>
+     <span class="srcpill" style="background:#e8f1ff;color:#0b3a8f">Google Sheet</span>→
+     <span class="srcpill" style="background:#e8f1ff;color:#0b3a8f">Publish CSV</span>→
+     <span class="srcpill" style="background:#e0f7f9;color:#0e7c86">Dashboard (60s/lần)</span>
+     <span style="color:#8aa0bd">· khi lỗi tự chuyển</span>
+     <span class="srcpill" style="background:#fff4e0;color:#8a5b12">/api/csv trên Vercel</span>
+     <span style="color:#8aa0bd">· "Trực tiếp lỗi" = tab chưa Publish to web</span>
+    </div></div>`;
  if(MY_ROLE==='admin')loadPermAdmin();
  const tb=document.querySelector('#diag tbody');
- const probe=async url=>{try{const c=new AbortController();const to=setTimeout(()=>c.abort(),15000);const r=await fetch(url,{signal:c.signal});clearTimeout(to);const t=await r.text();const rows=t.split(/\r?\n/).filter(x=>x.length);return{ok:r.ok&&rows.length>1,code:r.status,n:rows.length,head:(rows[0]||'(rỗng)').slice(0,60)};}catch(e){return{ok:false,code:'ERR',n:0,head:e&&e.message?e.message:''+e};}};
- tests.forEach(([nm,gid,f])=>{const tr=document.createElement('tr');tr.innerHTML=`<td>${nm}</td><td>…</td><td>…</td><td class="n">…</td><td class="small">đang gọi…</td>`;tb.appendChild(tr);
-   (async()=>{const du=f==='ton'?tonDirectURL():(f==='sla'?slaURL(gid):directURL(gid)),au=f==='ton'?tonApiURL():(f==='sla'?slaApiURL(gid):apiURL(gid));const d=await probe(du);
-     tr.children[1].textContent=d.ok?'✓ '+d.code:'✗ '+d.code;tr.children[1].style.color=d.ok?'#0f7a4d':'#9a3b2a';
-     let use=d;
-     if(!d.ok){const a=await probe(au);tr.children[2].textContent=a.ok?'✓ '+a.code:'✗ '+a.code;tr.children[2].style.color=a.ok?'#0f7a4d':'#9a3b2a';if(a.ok)use=a;}
-     else tr.children[2].textContent='— (không cần)';
-     tr.children[3].textContent=use.n;tr.children[4].textContent=use.head;tr.children[4].style.color=use.ok?'#0f7a4d':'#9a3b2a';})();});
+ const probe=window.__probeStub||(async url=>{try{const c=new AbortController();const to=setTimeout(()=>c.abort(),15000);const t0=Date.now();const r=await fetch(url,{signal:c.signal});clearTimeout(to);const t=await r.text();const rows=t.split(/\r?\n/).filter(x=>x.length);return{ok:r.ok&&rows.length>1,code:r.status,n:rows.length,head:(rows[0]||'(rỗng)').slice(0,60),ms:Date.now()-t0};}catch(e){return{ok:false,code:'ERR',n:0,head:e&&e.message?e.message:''+e,ms:0};}});
+ let done=0,okCnt=0;
+ const finish=()=>{const kt=document.getElementById('k_tabs');if(kt)kt.innerHTML=okCnt===nTests?`${okCnt}/${nTests} ✓`:`${okCnt}/${nTests}`;
+  const ds=document.getElementById('diagsum');if(ds){ds.textContent=done<nTests?`đang kiểm tra… ${done}/${nTests}`:(okCnt===nTests?`✓ toàn bộ ${nTests} tab đọc được`:`${okCnt}/${nTests} tab đọc được — kiểm tra dòng đỏ`);ds.style.color=done<nTests?'':(okCnt===nTests?'#0f7a4d':'#b91c1c');}};
+ finish();
+ groups.forEach(([gname,tests])=>{
+  const gr=document.createElement('tr');gr.className='grp';gr.innerHTML=`<td colspan="6">${gname}</td>`;tb.appendChild(gr);
+  tests.forEach(([nm,gid,f])=>{const tr=document.createElement('tr');
+   tr.innerHTML=`<td><span class="stdot" style="background:#94a3b8"></span></td><td><b>${nm}</b></td><td class="gidm">${f==='ton'?'file riêng':gid}</td><td>…</td><td class="n">…</td><td class="small">đang gọi…</td>`;tb.appendChild(tr);
+   (async()=>{const du=f==='ton'?tonDirectURL():(f==='sla'?slaURL(gid):directURL(gid)),au=f==='ton'?tonApiURL():(f==='sla'?slaApiURL(gid):apiURL(gid));
+     const d=await probe(du);let use=d,via='direct';
+     if(!d.ok){const a=await probe(au);if(a.ok){use=a;via='api';}else{via='fail';use=a.head?a:d;}}
+     tr.children[0].innerHTML=`<span class="stdot ${via==='direct'?'ok':(via==='api'?'warn':'bad')}"></span>`;
+     tr.children[3].innerHTML=via==='direct'?`<span class="srcpill" style="background:#e7fbf1;color:#0f7a4d">Google trực tiếp${use.ms?' · '+use.ms+'ms':''}</span>`
+       :(via==='api'?`<span class="srcpill" style="background:#fff4e0;color:#8a5b12">/api/csv dự phòng</span>`
+       :`<span class="srcpill" style="background:#fdeaee;color:#b91c1c">✗ lỗi cả 2 đường</span>`);
+     tr.children[4].textContent=use.n||'—';
+     tr.children[5].textContent=use.head;tr.children[5].style.color=use.ok?'#0f7a4d':'#9a3b2a';
+     done++;if(use.ok)okCnt++;finish();})();});});
 }
 function go(id){if(!canSee(id)){id=firstPage();} /* chặn vào trang ngoài quyền */
  curr=id;destroy();document.querySelectorAll('.nav').forEach(n=>n.classList.toggle('active',n.dataset.id===id));
