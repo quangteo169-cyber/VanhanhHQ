@@ -1,9 +1,10 @@
 // Vercel Serverless Function (CommonJS) — đọc CSV từ link PUBLISH của Google Sheet
-// Gọi: /api/csv?gid=<gid>[&f=<file>]  (f=def: Dash Report PCU 2026 · f=ton: file Tồn kho PVH6)
+// Gọi: /api/csv?gid=<gid>[&f=<file>]  (f=def: Dash Report PCU 2026 · f=ton: Tồn kho PVH6 · f=sla: SLA PVH10)
 module.exports = async (req, res) => {
   const FILES = {
     def: "2PACX-1vSve6XRHg5gWRzqkazHm5zvlrkTkAMLa7TJms_U-ebAFcrDAmcvCYfNJ50hrvV988tXyKC7q70LQgPc",
-    ton: "2PACX-1vQToyJFyIIxiDtucrAhxnTVZmjNWF2InPci5r-C75DfkHR6aQbUrmZNBcwDDadNrET82VwxtdjDhITE"
+    ton: "2PACX-1vQToyJFyIIxiDtucrAhxnTVZmjNWF2InPci5r-C75DfkHR6aQbUrmZNBcwDDadNrET82VwxtdjDhITE",
+    sla: "2PACX-1vRHGRhq3zSjBYecJRUbTLwlgjvx-A7hIu8J0eSkUKuXZI7uMWYLjyUeIKefumrnQLC5jIbW55y0lE1W"
   };
   const ALLOW = {
     def: new Set([
@@ -11,7 +12,8 @@ module.exports = async (req, res) => {
       "1043029815","1868031300","793401472","1289659560","1711960798",
       "153250085","386815906"
     ]),
-    ton: new Set(["0"])
+    ton: new Set(["0"]),
+    sla: new Set(["1982526665","511745866"])
   };
   const f = String((req.query && req.query.f) || "def");
   const gid = String((req.query && req.query.gid) || "");
