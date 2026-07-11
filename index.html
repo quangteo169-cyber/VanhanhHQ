@@ -5,6 +5,7 @@
 <title>Trung tâm Báo cáo PVH · HQ </title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
 :root{
  --bg0:#060d1c;--bg1:#0a1730;--bg2:#0e2144;
@@ -102,6 +103,8 @@ select:focus{outline:none;border-color:var(--cyan);box-shadow:0 0 10px rgba(34,2
     <div class="loginlogo">HQ</div>
     <div class="logintitle">Trung tâm Báo cáo PVH</div>
     <div class="loginsub">Đăng nhập nội bộ · HQ Group</div>
+    <div id="gbtn" style="display:flex;justify-content:center"></div>
+    <div id="gsep" class="loginsub" style="display:none;margin:10px 0 12px">— hoặc mật khẩu nội bộ —</div>
     <input id="lgEmail" type="email" placeholder="Email" autocomplete="username"/>
     <input id="lgPass" type="password" placeholder="Mật khẩu" autocomplete="current-password"/>
     <button class="loginbtn" onclick="doLogin()">Đăng nhập</button>
@@ -141,7 +144,31 @@ async function sha256(t){const b=await crypto.subtle.digest('SHA-256',new TextEn
 async function doLogin(){const em=(document.getElementById('lgEmail').value||'').trim().toLowerCase();const pw=document.getElementById('lgPass').value||'';let h='';try{h=await sha256(pw);}catch(e){document.getElementById('lgErr').textContent="Trình duyệt chặn mã hoá (hãy mở qua https/Vercel).";return;}
  if(em===AUTH_EMAIL&&h===AUTH_HASH){try{sessionStorage.setItem('pvh_auth','1')}catch(e){}showApp();}
  else document.getElementById('lgErr').textContent="Email hoặc mật khẩu không đúng.";}
-function showApp(){const l=document.getElementById('login');if(l)l.style.display='none';if(!window.__started){window.__started=true;startApp();}}
+function showApp(){const l=document.getElementById('login');if(l)l.style.display='none';
+ try{const u=sessionStorage.getItem('pvh_user');const b=document.querySelector('.brand small');if(u&&b)b.textContent=u;}catch(e){}
+ if(!window.__started){window.__started=true;startApp();}}
+
+/* ===== ĐĂNG NHẬP GOOGLE (Gsuite) — điền Client ID OAuth để bật; giới hạn theo domain tổ chức ===== */
+const GOOGLE_CLIENT_ID=""; /* <- dán Client ID dạng xxxx.apps.googleusercontent.com */
+const AUTH_DOMAINS=["hqgroups.vn","hqplay.vn"]; /* domain Gsuite được phép đăng nhập */
+function onGoogleCred(resp){
+ try{
+  const p=JSON.parse(atob(resp.credential.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));
+  const em=(p.email||'').toLowerCase();const dom=em.split('@')[1]||'';
+  const ok=p.email_verified&&(AUTH_DOMAINS.indexOf((p.hd||'').toLowerCase())>-1||AUTH_DOMAINS.indexOf(dom)>-1||em===AUTH_EMAIL);
+  if(ok){try{sessionStorage.setItem('pvh_auth','1');sessionStorage.setItem('pvh_user',em);}catch(e){}showApp();}
+  else document.getElementById('lgErr').textContent="Tài khoản "+em+" không thuộc tổ chức được cấp quyền.";
+ }catch(e){document.getElementById('lgErr').textContent="Không đọc được thông tin đăng nhập Google.";}}
+(function initG(tries){
+ if(!GOOGLE_CLIENT_ID)return;
+ if(!(window.google&&google.accounts&&google.accounts.id)){if(tries<25)setTimeout(()=>initG(tries+1),300);return;}
+ try{
+  google.accounts.id.initialize({client_id:GOOGLE_CLIENT_ID,callback:onGoogleCred});
+  const el=document.getElementById('gbtn');
+  if(el){google.accounts.id.renderButton(el,{theme:'filled_blue',size:'large',width:280});
+   const sep=document.getElementById('gsep');if(sep)sep.style.display='block';}
+ }catch(e){}
+})(0);
 document.addEventListener('keydown',e=>{const l=document.getElementById('login');if(e.key==='Enter'&&l&&l.style.display!=='none')doLogin();});
 
 /* ===== DỮ LIỆU THẬT (cấp tháng) ===== */
