@@ -142,22 +142,57 @@ const AUTH_EMAIL="vanhanh@hqgroups.vn";
 const AUTH_HASH="52c1966f11081859a47a12b72e7a9c82215fe10663c553a2f2a0a678b9aba6e4";
 async function sha256(t){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(t));return[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('');}
 async function doLogin(){const em=(document.getElementById('lgEmail').value||'').trim().toLowerCase();const pw=document.getElementById('lgPass').value||'';let h='';try{h=await sha256(pw);}catch(e){document.getElementById('lgErr').textContent="Trình duyệt chặn mã hoá (hãy mở qua https/Vercel).";return;}
- if(em===AUTH_EMAIL&&h===AUTH_HASH){try{sessionStorage.setItem('pvh_auth','1')}catch(e){}showApp();}
+ if(em===AUTH_EMAIL&&h===AUTH_HASH){MY_ROLE='admin';try{sessionStorage.setItem('pvh_auth','1');sessionStorage.setItem('pvh_user',em);sessionStorage.setItem('pvh_role','admin');}catch(e){}showApp();}
  else document.getElementById('lgErr').textContent="Email hoặc mật khẩu không đúng.";}
 function showApp(){const l=document.getElementById('login');if(l)l.style.display='none';
- try{const u=sessionStorage.getItem('pvh_user');const b=document.querySelector('.brand small');if(u&&b)b.textContent=u;}catch(e){}
+ try{const u=sessionStorage.getItem('pvh_user');const b=document.querySelector('.brand small');if(u&&b)b.textContent=u+' · '+(ROLE_LABEL[MY_ROLE]||MY_ROLE||'');}catch(e){}
  if(!window.__started){window.__started=true;startApp();}}
 
-/* ===== ĐĂNG NHẬP GOOGLE (Gsuite) — điền Client ID OAuth để bật; giới hạn theo domain tổ chức ===== */
+/* ===== PHÂN QUYỀN THEO VAI TRÒ (RBAC) =====
+   - Admin cứng: quynhhtn@hqplay.vn (luôn toàn quyền, không thể tự khoá).
+   - Whitelist: chỉ email đã được gán vai trò mới đăng nhập được (dù đúng domain
+     nhưng chưa gán vẫn bị chặn). Danh sách gán ở tab Google Sheet "Phân quyền"
+     (cột email · cột vai trò) để quản lý mà không phải deploy lại.
+   - Map vai trò → trang chỉnh ngay trong ROLE_PAGES bên dưới. */
+const SUPER_ADMIN="quynhhtn@hqplay.vn";
+const GID_PERM=""; /* <- dán gid tab "Phân quyền" (email | vai trò); để trống thì chỉ super-admin vào được */
+const ROLE_LABEL={admin:"Admin (toàn quyền)",leader:"Leader (vận hành)",nhanvien:"Nhân viên"};
+/* trang mỗi vai trò được xem — SRC (Nguồn & Cấu hình) mặc định chỉ admin */
+const ROLE_PAGES={
+ admin:"all",
+ leader:["TQ","PVH3","PVH4","PVH5","PVH6","PVH7","PVH9","PVH10","PVH11","PVH12"],
+ nhanvien:["PVH10"]
+};
+const ALL_PAGES=["TQ","PVH1","PVH2","PVH3","PVH4","PVH5","PVH6","PVH7","PVH8","PVH9","PVH10","PVH11","PVH12","SRC"];
+let PERM={},MY_ROLE=null;
+function normRole(x){x=(''+x).trim().toLowerCase();
+ if(/admin|quản\s*trị|bod|ceo/.test(x))return 'admin';
+ if(/leader|lead|trưởng|quản\s*lý|manager/.test(x))return 'leader';
+ if(/nhân\s*viên|nhanvien|staff|nv|member/.test(x))return 'nhanvien';
+ return ROLE_LABEL[x]?x:null;}
+async function loadPerm(){PERM={};PERM[SUPER_ADMIN]='admin';
+ if(!GID_PERM)return;
+ try{const rows=await fetchGid(GID_PERM);if(!rows)return;
+  rows.forEach(row=>{if(!row)return;let em='',ro='';
+   row.forEach(c=>{const v=(''+c).trim();if(/@/.test(v)&&!em)em=v.toLowerCase();else if(normRole(v)&&!ro)ro=normRole(v);});
+   if(em&&ro&&em!==SUPER_ADMIN)PERM[em]=ro;});}catch(e){}}
+function roleOf(email){email=(''+email).trim().toLowerCase();if(email===SUPER_ADMIN)return 'admin';return PERM[email]||null;}
+function pagesOf(role){return role==='admin'?ALL_PAGES.slice():(ROLE_PAGES[role]||[]);}
+function canSee(id){if(MY_ROLE==='admin')return true;return pagesOf(MY_ROLE).indexOf(id)>-1;}
+function firstPage(){const p=pagesOf(MY_ROLE);return p.length?p[0]:'TQ';}
+
 const GOOGLE_CLIENT_ID="195227450871-agk96k2h1897lnvgjk7uorfoe2q9dqqi.apps.googleusercontent.com";
-const AUTH_DOMAINS=["hqgroups.vn","hqplay.vn"]; /* domain Gsuite được phép đăng nhập */
-function onGoogleCred(resp){
+async function onGoogleCred(resp){
  try{
   const p=JSON.parse(atob(resp.credential.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));
-  const em=(p.email||'').toLowerCase();const dom=em.split('@')[1]||'';
-  const ok=p.email_verified&&(AUTH_DOMAINS.indexOf((p.hd||'').toLowerCase())>-1||AUTH_DOMAINS.indexOf(dom)>-1||em===AUTH_EMAIL);
-  if(ok){try{sessionStorage.setItem('pvh_auth','1');sessionStorage.setItem('pvh_user',em);}catch(e){}showApp();}
-  else document.getElementById('lgErr').textContent="Tài khoản "+em+" không thuộc tổ chức được cấp quyền.";
+  const em=(p.email||'').toLowerCase();
+  if(!p.email_verified){document.getElementById('lgErr').textContent="Email Google chưa xác minh.";return;}
+  await loadPerm();
+  const role=roleOf(em);
+  if(!role){document.getElementById('lgErr').textContent="Tài khoản "+em+" chưa được cấp quyền. Liên hệ admin ("+SUPER_ADMIN+") để gán vai trò.";return;}
+  MY_ROLE=role;
+  try{sessionStorage.setItem('pvh_auth','1');sessionStorage.setItem('pvh_user',em);sessionStorage.setItem('pvh_role',role);}catch(e){}
+  showApp();
  }catch(e){document.getElementById('lgErr').textContent="Không đọc được thông tin đăng nhập Google.";}}
 (function initG(tries){
  if(!GOOGLE_CLIENT_ID)return;
@@ -1091,12 +1126,32 @@ function spinner(t){return '<div class="center"><div class="spin"></div>'+t+'</d
 
 /* ===== ROUTER ===== */
 const TIERS=[[1,"Tầng 1 · Điều hành (CEO · Tháng)",["PVH1","PVH2","PVH8"]],[2,"Tầng 2 · Kiểm soát (Leader · Tuần)",["PVH3","PVH4","PVH5","PVH6","PVH7","PVH9","PVH10","PVH11","PVH12"]]];
-function buildNav(){let h='';TIERS.forEach(([t,label,ids])=>{h+=`<div class="tier">${label}</div>`;
- ids.forEach(k=>{h+=`<div class="nav" data-id="${k}" onclick="go('${k}')"><span class="code">${k}</span><span class="dot" style="color:#2e86e6;background:#2e86e6"></span><span>${PAGES[k].title.split('· ')[1]}</span></div>`;});});
- document.getElementById('nav').innerHTML=h;}
+function buildNav(){let h='';TIERS.forEach(([t,label,ids])=>{const vis=ids.filter(canSee);if(!vis.length)return;h+=`<div class="tier">${label}</div>`;
+ vis.forEach(k=>{h+=`<div class="nav" data-id="${k}" onclick="go('${k}')"><span class="code">${k}</span><span class="dot" style="color:#2e86e6;background:#2e86e6"></span><span>${PAGES[k].title.split('· ')[1]}</span></div>`;});});
+ document.getElementById('nav').innerHTML=h;
+ /* ô Tổng quan (nav big) và mục Hệ thống ẩn nếu vai trò không được xem */
+ const bigTQ=document.querySelector('.nav.big[data-id="TQ"]');if(bigTQ)bigTQ.style.display=canSee('TQ')?'':'none';
+ const src=document.querySelector('.nav[data-id="SRC"]');if(src)src.style.display=canSee('SRC')?'':'none';
+ const tierSys=src?src.previousElementSibling:null;if(tierSys&&tierSys.classList.contains('tier'))tierSys.style.display=canSee('SRC')?'':'none';}
+function permPanel(){
+ if(MY_ROLE!=='admin')return '';
+ const users=Object.keys(PERM).sort((a,b)=>(PERM[a]===PERM[b]?a.localeCompare(b):(PERM[a]==='admin'?-1:1)));
+ const sheetLink=GID_PERM?BASE+"?gid="+GID_PERM+"&single=true&output=csv":'';
+ const rp=Object.keys(ROLE_PAGES).map(r=>`<tr><td><span class="badge" style="background:${r==='admin'?'#0b3a8f':(r==='leader'?'#1e5fd0':'#4aa8f0')}">${ROLE_LABEL[r]}</span></td><td>${ROLE_PAGES[r]==='all'?'Tất cả các trang + Nguồn & Cấu hình':ROLE_PAGES[r].map(x=>x==='TQ'?'Tổng quan':x).join(' · ')}</td></tr>`).join('');
+ return `<div class="card" style="margin-bottom:14px"><h3 style="text-align:left">Phân quyền theo vai trò · <span class="small">Admin cứng: ${SUPER_ADMIN}</span></h3>
+  ${GID_PERM?'':`<div class="note" style="margin-bottom:10px"><b>Chưa nối tab "Phân quyền".</b> Hiện chỉ admin cứng đăng nhập được. Tạo một tab trên Google Sheet với <b>cột A = email · cột B = vai trò</b> (admin / leader / nhanvien), Publish to web, rồi gửi gid để bật whitelist cho cả nhóm.</div>`}
+  <div class="grid2" style="grid-template-columns:1fr 1fr;margin-bottom:0">
+   <div><div class="small" style="margin-bottom:6px;font-weight:bold">Người được cấp quyền (${users.length})${sheetLink?` · <a href="${sheetLink}" target="_blank" style="color:#1e5fd0">mở bảng phân quyền ↗</a>`:''}</div>
+    <div class="scroll" style="max-height:240px"><table class="tbl"><thead><tr><th>Email</th><th>Vai trò</th></tr></thead><tbody>
+    ${users.map(e=>`<tr><td>${e}${e===SUPER_ADMIN?' <span class="small">(admin cứng)</span>':''}</td><td><span class="badge" style="background:${PERM[e]==='admin'?'#0b3a8f':(PERM[e]==='leader'?'#1e5fd0':'#4aa8f0')}">${ROLE_LABEL[PERM[e]]||PERM[e]}</span></td></tr>`).join('')}
+    </tbody></table></div></div>
+   <div><div class="small" style="margin-bottom:6px;font-weight:bold">Vai trò xem được trang nào <span class="small">(chỉnh trong ROLE_PAGES)</span></div>
+    <table class="tbl"><thead><tr><th>Vai trò</th><th>Trang</th></tr></thead><tbody>${rp}</tbody></table>
+    <div class="small" style="margin-top:8px">Gán người: sửa tab "Phân quyền" trên Sheet (không cần deploy). Đổi trang cho vai trò: sửa ROLE_PAGES trong index.html.</div></div>
+  </div></div>`;}
 function renderSRC(){const host=document.getElementById('content');
  const tests=[['Data theo SPDV','460836856'],['Data theo NCC','1758921427'],['Data Nhập Theo Nhân viên',GIDS.nv],['Bảng tỉ giá','163849763'],['Data Robux (cũ)','562469906'],['Data Robux — giá vốn PVH4','386815906'],['Data giftcard','1043029815'],['Data Razergold','1868031300'],['Data OGGAMING','793401472'],['Data Nick Roblox','61864847'],['Tồn kho — FILE RIÊNG (PVH6)','0','ton'],['SLA theo năm (PVH10)','1982526665','sla'],['SLA theo ngày/tháng (PVH10)','511745866','sla']];
- host.innerHTML='<div class="card"><h3 style="text-align:left">Chẩn đoán nguồn dữ liệu — ưu tiên đọc TRỰC TIẾP Google Sheet, /api/csv là dự phòng</h3><div class="scroll"><table class="tbl" id="diag"><thead><tr><th>Tab</th><th>Google trực tiếp</th><th>/api/csv (dự phòng)</th><th class="n">Số dòng</th><th>Dòng đầu / lỗi</th></tr></thead><tbody></tbody></table></div><div class="small" style="margin-top:8px">Cần ít nhất 1 cột xanh cho mỗi tab. "Google trực tiếp" lỗi = tab chưa được Publish to web hoặc bị chặn CORS; "/api/csv" 404 = function Vercel chưa deploy.</div></div>';
+ host.innerHTML=permPanel()+'<div class="card"><h3 style="text-align:left">Chẩn đoán nguồn dữ liệu — ưu tiên đọc TRỰC TIẾP Google Sheet, /api/csv là dự phòng</h3><div class="scroll"><table class="tbl" id="diag"><thead><tr><th>Tab</th><th>Google trực tiếp</th><th>/api/csv (dự phòng)</th><th class="n">Số dòng</th><th>Dòng đầu / lỗi</th></tr></thead><tbody></tbody></table></div><div class="small" style="margin-top:8px">Cần ít nhất 1 cột xanh cho mỗi tab. "Google trực tiếp" lỗi = tab chưa được Publish to web hoặc bị chặn CORS; "/api/csv" 404 = function Vercel chưa deploy.</div></div>';
  const tb=document.querySelector('#diag tbody');
  const probe=async url=>{try{const c=new AbortController();const to=setTimeout(()=>c.abort(),15000);const r=await fetch(url,{signal:c.signal});clearTimeout(to);const t=await r.text();const rows=t.split(/\r?\n/).filter(x=>x.length);return{ok:r.ok&&rows.length>1,code:r.status,n:rows.length,head:(rows[0]||'(rỗng)').slice(0,60)};}catch(e){return{ok:false,code:'ERR',n:0,head:e&&e.message?e.message:''+e};}};
  tests.forEach(([nm,gid,f])=>{const tr=document.createElement('tr');tr.innerHTML=`<td>${nm}</td><td>…</td><td>…</td><td class="n">…</td><td class="small">đang gọi…</td>`;tb.appendChild(tr);
@@ -1107,13 +1162,14 @@ function renderSRC(){const host=document.getElementById('content');
      else tr.children[2].textContent='— (không cần)';
      tr.children[3].textContent=use.n;tr.children[4].textContent=use.head;tr.children[4].style.color=use.ok?'#0f7a4d':'#9a3b2a';})();});
 }
-function go(id){curr=id;destroy();document.querySelectorAll('.nav').forEach(n=>n.classList.toggle('active',n.dataset.id===id));
+function go(id){if(!canSee(id)){id=firstPage();} /* chặn vào trang ngoài quyền */
+ curr=id;destroy();document.querySelectorAll('.nav').forEach(n=>n.classList.toggle('active',n.dataset.id===id));
  renderFilters();
  document.getElementById('upd').textContent="Cập nhật "+new Date().toLocaleTimeString('vi-VN');
  if(id==="SRC"){document.getElementById('rtitle').textContent="Nguồn & Cấu hình";document.getElementById('rmeta').innerHTML="Đọc trực tiếp Google Sheet (publish CSV) · /api/csv là dự phòng";renderSRC();return;}
  render();}
-function startApp(){buildNav();go('TQ');loadLive();setInterval(loadLive,60000);}
-(function(){let a=false;try{a=sessionStorage.getItem('pvh_auth')==='1'}catch(e){}if(a)showApp();})();
+function startApp(){buildNav();go(firstPage());loadLive();setInterval(loadLive,60000);}
+(function(){let a=false;try{a=sessionStorage.getItem('pvh_auth')==='1';if(a)MY_ROLE=sessionStorage.getItem('pvh_role')||'admin';}catch(e){}if(a)showApp();})();
 
 </script>
 </body>
