@@ -95,6 +95,21 @@ select:focus{outline:none;border-color:var(--cyan);box-shadow:0 0 10px rgba(34,2
 .center{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:50px;color:#9fb4d3;gap:12px}
 .spin{width:26px;height:26px;border:3px solid rgba(120,180,255,.25);border-top-color:#22d3ee;border-radius:50%;animation:spin .8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
+/* dropdown tick chọn báo cáo (mục Quản lý đăng nhập) */
+.pgpick{display:inline-block}
+.pgpick>summary{list-style:none;cursor:pointer;border:1px solid #c9d6ea;border-radius:7px;padding:6px 10px;font-size:12px;background:#fff;color:#1c2c4a;min-width:200px;max-width:240px;display:flex;justify-content:space-between;gap:8px;align-items:center}
+.pgpick>summary::-webkit-details-marker{display:none}
+.pgpick>summary .pgsum{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pgpick[open]>summary{border-color:#1e5fd0;box-shadow:0 0 0 2px rgba(30,95,208,.15)}
+.pgmenu{position:fixed;z-index:200;background:#fff;border:1px solid #c9d6ea;border-radius:9px;box-shadow:0 14px 36px rgba(2,8,23,.28);padding:9px;width:286px;max-height:min(70vh,360px);overflow:auto}
+.pgmenu .qa{display:flex;gap:5px;margin-bottom:7px}
+.pgmenu .qa button{flex:1;font-size:11px;padding:5px 4px;border:1px solid #c9d6ea;border-radius:6px;background:#f4f7fc;cursor:pointer;color:#1c2c4a;font-weight:bold}
+.pgmenu .qa button:hover{background:#e6edf6}
+.pgmenu label{display:flex;align-items:center;gap:8px;padding:5px 7px;border-radius:6px;font-size:12.5px;color:#1c2c4a;cursor:pointer}
+.pgmenu label:hover{background:#eef4ff}
+.pgmenu label input{width:15px;height:15px;accent-color:#1e5fd0;flex:0 0 15px}
+.pgmenu label b{flex:0 0 46px}
+.pgmenu .allrow{border-bottom:1px solid #e6edf6;margin-bottom:4px;padding-bottom:6px;font-weight:bold}
 </style>
 </head>
 <body>
@@ -1148,33 +1163,52 @@ function permPanel(){
 let _acl={users:{},pending:[]};
 const _roleBg=r=>r==='admin'?'#0b3a8f':(r==='leader'?'#1e5fd0':'#4aa8f0');
 function _roleSel(id,cur){return `<select id="${id}" style="padding:5px 8px">${['admin','leader','nhanvien'].map(x=>`<option value="${x}"${x===cur?' selected':''}>${ROLE_LABEL[x]}</option>`).join('')}</select>`;}
-function _pgInput(id,val){return `<input id="${id}" value="${val||''}" placeholder="trống=mặc định · all · TQ,PVH10" style="width:210px;padding:5px 8px;border:1px solid #c9d6ea;border-radius:6px;font-size:12px">`;}
+/* dropdown tick chọn báo cáo — cur: 'all' | mảng mã | null(mặc định vai trò) */
+function _pgSummaryText(cur){if(cur==='all')return 'Tất cả báo cáo';if(Array.isArray(cur)&&cur.length)return cur.join(', ');return 'Mặc định theo vai trò';}
+function _pgPicker(idb,cur){
+ const isAll=cur==='all';const arr=Array.isArray(cur)?cur:[];
+ const rows=ALL_PAGES.map(id=>{const chk=(!isAll&&arr.indexOf(id)>-1)?' checked':'';
+   const nm=id==='TQ'?'Tổng quan':(id==='SRC'?'Cấu hình':pageName(id).replace(/^PVH\d+\s*·\s*/,''));
+   return `<label><input type="checkbox" class="pgc" value="${id}"${chk} onchange="_pgSync('${idb}')"> <b>${id}</b><span>${nm}</span></label>`;}).join('');
+ return `<details class="pgpick" id="${idb}" ontoggle="_pgPos('${idb}')"><summary><span class="pgsum">${_pgSummaryText(cur)}</span><span style="color:#8aa0bd">▾</span></summary>
+  <div class="pgmenu">
+   <div class="qa"><button type="button" onclick="_pgAll('${idb}',true)">Chọn tất cả</button><button type="button" onclick="_pgAll('${idb}',false)">Bỏ chọn</button><button type="button" onclick="_pgDefault('${idb}')">Mặc định vai trò</button></div>
+   <label class="allrow"><input type="checkbox" class="pgall"${isAll?' checked':''} onchange="_pgAllToggle('${idb}')"> <b>ALL</b><span>Tất cả báo cáo</span></label>
+   ${rows}
+  </div></details>`;}
+function _pgPos(idb){const el=document.getElementById(idb);if(!el||!el.open)return;const s=el.querySelector('summary').getBoundingClientRect();const m=el.querySelector('.pgmenu');
+ m.style.top=(s.bottom+3)+'px';m.style.left=Math.min(s.left,window.innerWidth-300)+'px';}
+function _pgSummary(idb){const el=document.getElementById(idb);const all=el.querySelector('.pgall').checked;const ch=[].slice.call(el.querySelectorAll('.pgc:checked')).map(x=>x.value);
+ el.querySelector('.pgsum').textContent=all?'Tất cả báo cáo':(ch.length?ch.join(', '):'Mặc định theo vai trò');}
+function _pgSync(idb){const el=document.getElementById(idb);if(el.querySelectorAll('.pgc:checked').length>0)el.querySelector('.pgall').checked=false;_pgSummary(idb);}
+function _pgAllToggle(idb){const el=document.getElementById(idb);if(el.querySelector('.pgall').checked)el.querySelectorAll('.pgc').forEach(x=>x.checked=false);_pgSummary(idb);}
+function _pgAll(idb,val){const el=document.getElementById(idb);el.querySelector('.pgall').checked=false;el.querySelectorAll('.pgc').forEach(x=>x.checked=val);_pgSummary(idb);}
+function _pgDefault(idb){const el=document.getElementById(idb);el.querySelector('.pgall').checked=false;el.querySelectorAll('.pgc').forEach(x=>x.checked=false);_pgSummary(idb);}
+function _pgRead(idb){const el=document.getElementById(idb);if(!el)return null;if(el.querySelector('.pgall').checked)return 'all';const ch=[].slice.call(el.querySelectorAll('.pgc:checked')).map(x=>x.value);return ch.length?ch:null;}
 async function loadPermAdmin(){const box=document.getElementById('permbox');if(!box)return;
  const r=await aclSend('list');
  if(r.error){box.innerHTML=`<div class="note">${r.error==='kv_not_configured'?'<b>Kho tài khoản (Vercel KV) chưa cấu hình.</b> Tạo KV store trên Vercel rồi deploy lại.':(r.error==='forbidden'||r.error==='unauthorized'?'Phiên đăng nhập hết hạn hoặc bạn đăng nhập bằng mật khẩu (không có token Google). Hãy <b>đăng nhập lại bằng Google</b> để quản lý tài khoản.':'Không tải được danh sách: '+r.error)}</div>`;return;}
  _acl={users:r.users||{},pending:r.pending||[]};
- const codes=ALL_PAGES.filter(x=>x!=='SRC').map(id=>`<span class="chip" style="display:inline-block;margin:2px"><b>${id}</b> ${id==='TQ'?'Tổng quan':pageName(id).replace(/^PVH\d+\s*·\s*/,'')}</span>`).join('')+`<span class="chip" style="display:inline-block;margin:2px"><b>SRC</b> Cấu hình</span>`;
  let h='';
  const pend=_acl.pending;
  h+=`<div class="row" style="margin-bottom:6px"><b style="color:${pend.length?'#b45309':'#5b6b7b'}">● Chờ cấp quyền (${pend.length})</b><span class="small">— email đăng nhập lần đầu chưa có tài khoản</span></div>`;
  if(!pend.length)h+='<div class="small" style="margin-bottom:12px">Chưa có tài khoản mới nào chờ duyệt.</div>';
  else{h+='<div class="scroll" style="max-height:220px;margin-bottom:14px"><table class="tbl"><thead><tr><th>Email</th><th>Vai trò</th><th>Báo cáo được xem</th><th></th></tr></thead><tbody>';
-  pend.forEach((e,i)=>{h+=`<tr><td>${e}</td><td>${_roleSel('prole'+i,'nhanvien')}</td><td>${_pgInput('ppg'+i,'')}</td><td style="white-space:nowrap"><button class="btn" onclick="aclAssign('pending',${i})">✓ Cấp quyền</button> <button class="pbtn" onclick="aclDismiss('pending',${i})">Bỏ qua</button></td></tr>`;});
+  pend.forEach((e,i)=>{h+=`<tr><td>${e}</td><td>${_roleSel('prole'+i,'nhanvien')}</td><td>${_pgPicker('ppg'+i,null)}</td><td style="white-space:nowrap"><button class="btn" onclick="aclAssign('pending',${i})">✓ Cấp quyền</button> <button class="pbtn" onclick="aclDismiss('pending',${i})">Bỏ qua</button></td></tr>`;});
   h+='</tbody></table></div>';}
  const ue=Object.keys(_acl.users).sort();
  h+=`<div class="row" style="margin-bottom:6px"><b>Tài khoản đã cấp quyền (${ue.length+1})</b></div>`;
  h+='<div class="scroll" style="max-height:320px"><table class="tbl"><thead><tr><th>Email</th><th>Vai trò</th><th>Báo cáo được xem</th><th></th></tr></thead><tbody>';
  h+=`<tr><td>${SUPER_ADMIN} <span class="small">(admin cứng)</span></td><td><span class="badge" style="background:#0b3a8f">Admin</span></td><td class="small">Tất cả + Cấu hình</td><td></td></tr>`;
- ue.forEach((e,i)=>{const en=_acl.users[e];const pgv=en.pages==='all'?'all':(Array.isArray(en.pages)?en.pages.join(', '):'');
-  h+=`<tr><td>${e}</td><td>${_roleSel('urole'+i,en.role)}</td><td>${_pgInput('upg'+i,pgv)}</td><td style="white-space:nowrap"><button class="btn" onclick="aclAssign('user',${i})">Lưu</button> <button class="pbtn" onclick="aclRemove('user',${i})">Thu hồi</button></td></tr>`;});
+ ue.forEach((e,i)=>{const en=_acl.users[e];
+  h+=`<tr><td>${e}</td><td>${_roleSel('urole'+i,en.role)}</td><td>${_pgPicker('upg'+i,en.pages)}</td><td style="white-space:nowrap"><button class="btn" onclick="aclAssign('user',${i})">Lưu</button> <button class="pbtn" onclick="aclRemove('user',${i})">Thu hồi</button></td></tr>`;});
  h+='</tbody></table></div>';
- h+=`<div class="small" style="margin-top:10px"><b>Cách dùng:</b> chọn vai trò + (tuỳ chọn) gõ mã báo cáo vào ô "Báo cáo được xem" — để trống thì áp mặc định theo vai trò, ghi <code>all</code> cho xem hết. Mã báo cáo:</div><div style="margin-top:6px;line-height:2">${codes}</div>
-  <div class="small" style="margin-top:8px">Mặc định theo vai trò: <b>Admin</b> tất cả + Cấu hình · <b>Leader</b> ${ROLE_PAGES.leader.join(', ')} · <b>Nhân viên</b> ${ROLE_PAGES.nhanvien.join(', ')}.</div>`;
+ h+=`<div class="small" style="margin-top:10px"><b>Cách dùng:</b> chọn vai trò, mở ô "Báo cáo được xem" để <b>tick</b> đúng báo cáo cho người đó (hoặc <b>ALL</b> = xem hết · để nguyên "Mặc định theo vai trò"), rồi bấm <b>Lưu / Cấp quyền</b>.</div>
+  <div class="small" style="margin-top:6px">Mặc định theo vai trò: <b>Admin</b> tất cả + Cấu hình · <b>Leader</b> ${ROLE_PAGES.leader.join(', ')} · <b>Nhân viên</b> ${ROLE_PAGES.nhanvien.join(', ')}.</div>`;
  box.innerHTML=h;}
-async function aclAssign(kind,i){let email,role,pgv;
- if(kind==='pending'){email=_acl.pending[i];role=document.getElementById('prole'+i).value;pgv=document.getElementById('ppg'+i).value;}
- else{email=Object.keys(_acl.users).sort()[i];role=document.getElementById('urole'+i).value;pgv=document.getElementById('upg'+i).value;}
- const pages=parsePages(pgv);
+async function aclAssign(kind,i){let email,role,pages;
+ if(kind==='pending'){email=_acl.pending[i];role=document.getElementById('prole'+i).value;pages=_pgRead('ppg'+i);}
+ else{email=Object.keys(_acl.users).sort()[i];role=document.getElementById('urole'+i).value;pages=_pgRead('upg'+i);}
  const r=await aclSend('assign',{email,role,pages});
  if(r.error){alert('Lỗi cấp quyền: '+r.error);return;}
  loadPermAdmin();}
