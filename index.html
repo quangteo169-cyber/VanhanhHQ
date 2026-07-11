@@ -508,49 +508,67 @@ const PAGES={
       options:{plugins:{legend:{display:true,position:'top',labels:{boxWidth:10}},tooltip:{callbacks:{label:c=>c.dataset.label+': '+fmt(c.parsed.y)}}},scales:{x:{...noX,stacked:true},y:{...yG,stacked:true,ticks:{callback:fmtAxis}}}}});
    });
  }},
- PVH10:{title:"PVH10 · Năng suất xử lý đơn (SLA/Accuracy)",meta:"Nguồn: file SLA riêng — tab Theo ngày/tháng (lọc theo Từ–Đến) + tab Theo năm (nguyên trạng)",render(host){
-   host.innerHTML=spinner("Đang đọc file SLA (theo ngày/tháng + theo năm)…");
+ PVH10:{title:"PVH10 · Năng suất xử lý đơn (SLA/Accuracy)",meta:"Nguồn: Báo cáo Năng xuất Xử lý đơn 2026 — tab Theo tháng (báo cáo ngày, lọc Từ–Đến) + tab Theo năm (nhân sự × tháng)",render(host){
+   host.innerHTML=spinner("Đang đọc Báo cáo Năng xuất Xử lý đơn…");
    Promise.all([slaRows('ngay'),slaRows('nam')]).then(([Rn,Ry])=>{
      let h='';const charts=[];
-     const D=parseSlaDaily(Rn);
-     if(!D){const sample=(Rn||[]).slice(0,10);
-       const prev=sample.length?`<div class="card" style="margin-top:12px"><h3>Theo ngày/tháng — dữ liệu thô (10 dòng đầu × 12 cột), chụp gửi lại nếu vẫn lỗi</h3><div class="scroll"><table class="tbl"><tbody>${sample.map((r,i)=>`<tr><td>${i+1}</td>${Array.from({length:12},(_,c)=>`<td>${((''+((r||[])[c]??'')).slice(0,16))}</td>`).join('')}</tr>`).join('')}</tbody></table></div></div>`:'';
-       h+=`<div class="note"><b>Không đọc được tab "Theo ngày, tháng"</b> (gid ${SLA_GIDS.ngay})${sample.length?' — không dò ra cột Ngày + cột số liệu':' — không tải được CSV (kiểm tra Publish to web)'}.<br><button class="btn" style="margin-top:8px" onclick="delete SLAD.ngay;render()">↻ Thử lại</button></div>${prev}`;}
+     const T=parseSlaThang(Rn);
+     const fk=iso(FROM),tk=iso(TO);
+     if(!T){const sample=(Rn||[]).slice(0,10);
+       h+=`<div class="note"><b>Không đọc được tab "Theo tháng"</b> (gid ${SLA_GIDS.ngay})${sample.length?' — không dò ra hàng Ngày (01/07…) và các khối chỉ số':' — không tải được CSV (kiểm tra Publish to web)'}.<br><button class="btn" style="margin-top:8px" onclick="delete SLAD.ngay;render()">↻ Thử lại</button></div>`;
+       if(sample.length)h+=`<div class="card" style="margin-top:12px"><h3>Theo tháng — dữ liệu thô (10 dòng × 14 cột)</h3><div class="scroll"><table class="tbl"><tbody>${sample.map((r,i)=>`<tr><td>${i+1}</td>${Array.from({length:14},(_,c)=>`<td>${((''+((r||[])[c]??'')).slice(0,12))}</td>`).join('')}</tr>`).join('')}</tbody></table></div></div>`;}
      else{
-       const fk=iso(FROM),tk=iso(TO);
-       const inS=D.recs.filter(r=>r.dk>=fk&&r.dk<=tk);
-       if(!inS.length)h+=`<div class="note">Không có dòng nào trong phạm vi ${scopeLabel()} — thử bấm <b>Cả kỳ</b>.</div>`;
+       const days=T.dateCols.filter(dc=>dc.dk>=fk&&dc.dk<=tk);
+       if(!days.length)h+=`<div class="note">Tab "Theo tháng" hiện chứa ${T.dateCols.length} ngày (${T.dateCols[0].dk.slice(5)} → ${T.dateCols[T.dateCols.length-1].dk.slice(5)}) — ngoài phạm vi ${scopeLabel()}. Chỉnh Từ–Đến trùm tháng đang báo cáo.</div>`;
        else{
-         const tot=slaAgg(inS,D.cols);
-         h+=`<div class="small" style="margin-bottom:10px">Phạm vi ${scopeLabel()} · ${fmt(inS.length)} dòng ngày · cột %/SLA/tỷ lệ tính BÌNH QUÂN, cột đếm tính TỔNG — tên chỉ số giữ nguyên theo tiêu đề file</div>
-          <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr))">${D.cols.slice(0,5).map(c=>kpi(c.name,slaFmt(c,tot[c.name]),c.pct?'bình quân kỳ':'tổng trong kỳ')).join('')}</div>`;
-         /* bảng theo tháng */
-         const mm={};inS.forEach(r=>{const k=r.dk.slice(5,7);(mm[k]=mm[k]||[]).push(r);});
-         const mks=Object.keys(mm).sort();
-         h+=`<div class="grid2" style="grid-template-columns:1.4fr 1fr">${cc((D.cols[0]?D.cols[0].name:'Chỉ số chính')+" — theo "+(rangeDays().length<=62?"ngày":"tháng"),"p10a")}
-          <div class="card"><h3>Tổng hợp theo tháng</h3><div class="scroll" style="max-height:260px"><table class="tbl"><thead><tr><th>Tháng</th>${D.cols.map(c=>`<th class="n">${c.name}</th>`).join('')}</tr></thead><tbody>
-          ${mks.map(k=>{const a=slaAgg(mm[k],D.cols);return `<tr><td>T${k}</td>${D.cols.map(c=>`<td class="n">${slaFmt(c,a[c.name])}</td>`).join('')}</tr>`;}).join('')}
-          <tr style="font-weight:bold;background:#eef4ff"><td>Kỳ lọc</td>${D.cols.map(c=>`<td class="n">${slaFmt(c,tot[c.name])}</td>`).join('')}</tr>
-          </tbody></table></div></div></div>`;
-         const main=D.cols[0];
-         if(main){
-           const byDay=rangeDays().length<=62;
-           let labels,vals;
-           if(byDay){const dm={};inS.forEach(r=>{dm[r.dk]=(dm[r.dk]||0)+r.vals[main.name];});labels=Object.keys(dm).sort();vals=labels.map(k=>dm[k]);labels=labels.map(k=>k.slice(8,10)+'/'+k.slice(5,7));}
-           else{labels=mks.map(k=>'T'+k);vals=mks.map(k=>slaAgg(mm[k],[main])[main.name]);}
-           charts.push({id:'p10a',labels,vals,pct:main.pct});}
+         const sum=row=>row?days.reduce((a,dc)=>a+(row.daily[dc.dk]||0),0):0;
+         const meanPos=row=>{if(!row)return 0;let s=0,n=0;days.forEach(dc=>{const v=row.daily[dc.dk];if(v!=null&&v>0){s+=v;n++;}});return n?s/n:0;};
+         const tong=b=>b&&(b.rows.find(r=>/^tổng/i.test(r.name))||b.rows[0]);
+         const staffOf=b=>b?b.rows.filter(r=>r.name&&!/^tổng/i.test(r.name)):[];
+         const ps0=T.ps&&T.ps.rows[0],htT=tong(T.ht),ltT=tong(T.lt),pcT=tong(T.pc),hy0=T.hy&&T.hy.rows[0];
+         const psS=sum(ps0),htS=sum(htT),ltM=meanPos(ltT),pcM=meanPos(pcT),hyS=sum(hy0);
+         const f1=n=>n.toLocaleString('vi-VN',{minimumFractionDigits:1,maximumFractionDigits:1});
+         h+=`<div class="small" style="margin-bottom:10px">Báo cáo ngày — ${days.length} ngày trong phạm vi ${scopeLabel()} · KPI lấy từ file: Hoàn tất ${T.ht?T.ht.kpi:''} · Lead time ${T.lt?T.lt.kpi:''} · Đạt KPI ${T.pc?T.pc.kpi:''}</div>
+          <div class="kpis" style="grid-template-columns:repeat(5,1fr)">
+           ${kpi("Đơn phát sinh",fmt(psS),"trong phạm vi")}
+           ${kpi("Đơn hoàn tất",fmt(htS),(T.ht&&T.ht.kpi?("KPI "+T.ht.kpi+" · "):"")+fmt(Math.round(htS/(days.length||1)))+" đơn/ngày")}
+           ${kpi("Lead time TB",f1(ltM)+" h",`<span class="${ltM<=4?'up':'down'}">${ltM<=4?'✓ đạt':'✗ vượt'} KPI ${T.lt?T.lt.kpi:'≤4h'}</span>`)}
+           ${kpi("Tỷ lệ đạt KPI leadtime",f1(pcM)+"%",`<span class="${pcM>=85?'up':'down'}">${pcM>=85?'✓ đạt':'✗ dưới'} mức ${T.pc?T.pc.kpi:'>85%'}</span>`)}
+           ${kpi("Đơn hủy",fmt(hyS),"trong phạm vi")}
+          </div>
+          <div class="grid2" style="grid-template-columns:1.5fr 1fr">
+           ${cc("Đơn phát sinh vs hoàn tất theo ngày","p10a")}
+           <div class="card"><h3>Năng suất nhân sự — kỳ lọc</h3><div class="scroll" style="max-height:250px"><table class="tbl"><thead><tr><th>Nhân sự</th><th class="n">Hoàn tất</th><th class="n">Lead TB (h)</th><th class="n">% đạt KPI</th></tr></thead><tbody>
+           ${staffOf(T.ht).map(st=>{const lt=T.lt?T.lt.rows.find(r=>r.name===st.name):null;const pc=T.pc?T.pc.rows.find(r=>r.name===st.name):null;
+             const l=meanPos(lt),p=meanPos(pc),ht=sum(st);
+             return `<tr><td>${st.name}</td><td class="n">${fmt(ht)}</td><td class="n"><span class="${l?(l<=4?'up':'down'):'flat'}">${l?f1(l):'—'}</span></td><td class="n"><span class="${p?(p>=85?'up':'down'):'flat'}">${p?f1(p)+'%':'—'}</span></td></tr>`;}).join('')}
+           <tr style="font-weight:bold;background:#eef4ff"><td>TỔNG</td><td class="n">${fmt(htS)}</td><td class="n">${f1(ltM)}</td><td class="n">${f1(pcM)}%</td></tr>
+           </tbody></table></div></div>
+          </div>`;
+         charts.push({id:'p10a',labels:days.map(dc=>dc.dk.slice(8,10)+'/'+dc.dk.slice(5,7)),
+           s1:days.map(dc=>ps0?(ps0.daily[dc.dk]||0):0),s2:days.map(dc=>htT?(htT.daily[dc.dk]||0):0)});
        }}
-     /* tab theo năm — nguyên trạng */
-     if(Ry&&Ry.length>1){
-       const rowsY=Ry.filter(r=>(r||[]).some(x=>(''+x).trim())).slice(0,25);
-       const w=Math.min(Math.max(...rowsY.map(r=>r.length)),14);
-       h+=`<div class="card" style="margin-top:13px"><h3>Theo năm — nguyên trạng từ file</h3><div class="scroll" style="max-height:420px"><table class="tbl"><tbody>
-        ${rowsY.map(r=>`<tr>${Array.from({length:w},(_,c)=>{const v=(''+((r||[])[c]??'')).trim();const n=num(v);return `<td class="${n&&/^[\d.,%\s$-]+$/.test(v)?'n':''}">${v&&n&&/^[\d.,\s]+$/.test(v)?fmtn(n):v}</td>`;}).join('')}</tr>`).join('')}
-        </tbody></table></div></div>`;}
-     else h+=`<div class="note" style="margin-top:13px"><b>Không đọc được tab "Theo năm"</b> (gid ${SLA_GIDS.nam}) — kiểm tra Publish to web. <button class="btn" onclick="delete SLAD.nam;render()">↻ Thử lại</button></div>`;
+     /* ---- THEO NĂM: nhân sự × tháng ---- */
+     const Y=parseSlaNam(Ry);
+     if(!Y){h+=`<div class="note" style="margin-top:13px"><b>Không đọc được tab "Theo năm"</b> (gid ${SLA_GIDS.nam}) — cần hàng "Tháng" (1..12) và hàng "Tổng NĂM". <button class="btn" onclick="delete SLAD.nam;render()">↻ Thử lại</button></div>`;}
+     else{
+       const sSum=Y.staff.reduce((a,st)=>a+st.yr,0);
+       const hiM=Y.yByM.indexOf(Math.max(...Y.yByM));
+       h+=`<div class="card" style="margin-top:13px"><h3>Theo năm — ${fmt(Y.yTot)} đơn · ${Y.staff.length} nhân sự · đỉnh T${pad2(hiM+1)} (${fmt(Y.yByM[hiM])})${Math.abs(sSum-Y.yTot)>Math.max(1,Y.yTot*0.001)?` · <span style="color:#b91c1c">cộng nhân sự ${fmt(sSum)} ≠ Tổng NĂM ${fmt(Y.yTot)}</span>`:' · <span style="color:#0f7a4d">✓ khớp hàng Tổng NĂM</span>'}</h3>
+        <div class="grid2" style="grid-template-columns:1fr 1fr;margin-bottom:0">${cc("Tổng đơn xử lý theo tháng","p10y")}${cc("Theo nhân sự (cả năm)","p10s")}</div>
+        <div class="scroll" style="max-height:340px;margin-top:12px"><table class="tbl"><thead><tr><th>Nhân sự</th><th class="n">Cả năm</th>${MN.map(m=>`<th class="n">${m}</th>`).join('')}</tr></thead><tbody>
+        ${Y.staff.map(st=>`<tr><td>${st.name}</td><td class="n"><b>${fmt(st.yr)}</b></td>${st.m.map(v=>`<td class="n">${fmtn(v)}</td>`).join('')}</tr>`).join('')}
+        <tr style="font-weight:bold;background:#eef4ff"><td>Tổng NĂM</td><td class="n">${fmt(Y.yTot)}</td>${Y.yByM.map(v=>`<td class="n">${fmtn(v)}</td>`).join('')}</tr>
+        </tbody></table></div></div>`;
+       charts.push({id:'p10y',labels:MN,bar:Y.yByM});
+       const topS=Y.staff.slice(0,16);
+       charts.push({id:'p10s',labels:topS.map(st=>st.name),hbar:topS.map(st=>st.yr)});
+     }
      host.innerHTML=h;
-     charts.forEach(ch=>{mk(ch.id,{type:ch.labels.length>20?'bar':'line',data:{labels:ch.labels,datasets:[{data:ch.vals.map(v=>ch.pct?+( (v<=1?v*100:v) ).toFixed(1):v),borderColor:'#1e5fd0',backgroundColor:ch.labels.length>20?'#2e86e6':'rgba(37,99,235,.15)',fill:ch.labels.length<=20,borderWidth:2,tension:.3,pointRadius:2}]},
-      options:{plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>ch.pct?c.parsed.y+'%':fmt(c.parsed.y)}}},scales:{x:noX,y:{...yG,ticks:{callback:ch.pct?(v=>v+'%'):fmtAxis}}}}});});
+     charts.forEach(ch=>{
+       if(ch.s1)mk(ch.id,{type:'bar',data:{labels:ch.labels,datasets:[{label:'Phát sinh',data:ch.s1,backgroundColor:'#7cc4f7'},{label:'Hoàn tất',data:ch.s2,backgroundColor:'#1e5fd0'}]},options:barOpt(true)});
+       else if(ch.bar)mk(ch.id,{type:'bar',data:{labels:ch.labels,datasets:[{data:ch.bar,backgroundColor:'#2e86e6',borderRadius:2}]},options:barOpt(false)});
+       else if(ch.hbar)mk(ch.id,{type:'bar',data:{labels:ch.labels,datasets:[{data:ch.hbar,backgroundColor:'#1e5fd0'}]},options:hbarOpt()});});
    });
  }},
  PVH12:{title:"PVH12 · Báo cáo Hoàn (nick/đơn)",meta:"Nguồn: Data Nick Roblox (realtime)",render(host){
@@ -931,7 +949,7 @@ async function tonKhoData(){if(TONKHO!==undefined)return TONKHO;
  if(!L){const r2=await loadCSV(tonApiURL());if(r2)rows=r2;L=parseTonKho(r2);}
  TONKHO_ROWS=rows?rows.slice(0,12):null;TONKHO=L;return TONKHO;}
 
-/* ===== PVH10: SLA/Accuracy — FILE RIÊNG (2 tab: theo ngày/tháng + theo năm) ===== */
+/* ===== PVH10: SLA/Accuracy — FILE RIÊNG "Báo cáo Năng xuất Xử lý đơn 2026" ===== */
 const BASE_SLA="https://docs.google.com/spreadsheets/d/e/2PACX-1vRHGRhq3zSjBYecJRUbTLwlgjvx-A7hIu8J0eSkUKuXZI7uMWYLjyUeIKefumrnQLC5jIbW55y0lE1W/pub";
 const SLA_GIDS={nam:'1982526665',ngay:'511745866'};
 function slaURL(gid){return BASE_SLA+"?gid="+gid+"&single=true&output=csv";}
@@ -942,34 +960,59 @@ async function slaRows(key){if(SLAD[key]!==undefined)return SLAD[key];
  let rows=await loadCSV(slaURL(gid));
  if(!rows||rows.length<2)rows=await loadCSV(slaApiURL(gid));
  SLAD[key]=(rows&&rows.length>1)?rows:null;return SLAD[key];}
-/* tab theo ngày: dò cột Ngày + các cột SỐ theo tên tiêu đề trên file (giữ nguyên ngữ nghĩa của file) */
-function parseSlaDaily(rows){
- if(!rows||rows.length<2)return null;
- const norm=x=>{try{x=(''+x).normalize('NFC');}catch(e){x=''+x;}return x.replace(/\u00A0/g,' ').trim();};
- let H=-1,iD=-1;
- for(let r=0;r<Math.min(rows.length,20);r++){const row=(rows[r]||[]).map(norm);
-  const d=row.findIndex(x=>/ngày|date|thời\s*gian/i.test(x));
-  if(d<0)continue;
-  let ok=0;for(let k=r+1;k<Math.min(rows.length,r+12);k++){if(parseDateCell((rows[k]||[])[d]))ok++;}
-  if(ok>=2&&row.filter(x=>x).length>=2){H=r;iD=d;break;}}
- if(H<0)return null;
- const hdr=(rows[H]||[]).map(norm);
- /* cột %: phải có ký hiệu % / "tỷ lệ", hoặc SLA/accuracy THUẦN (không kèm chữ đếm như Đơn/Số/Tổng) */
- let cols=hdr.map((name,ci)=>({name,ci,pct:/%|tỷ\s*lệ/i.test(name)||(/sla|accuracy/i.test(name)&&!/đơn|số|tổng|lượng/i.test(name))})).filter(c=>c.ci!==iD&&c.name);
- const recs=[];
- for(let r=H+1;r<rows.length;r++){const row=rows[r];if(!row)continue;
-  const dt=parseDateCell(row[iD]);if(!dt)continue;
-  const vals={};cols.forEach(c=>{vals[c.name]=num(row[c.ci]);});
-  recs.push({dk:dkey(dt.mo,dt.d),vals});}
- if(!recs.length)return null;
- /* chỉ giữ cột thực sự có số */
- cols=cols.filter(c=>recs.some(r=>r.vals[c.name]>0)).slice(0,8);
- /* giá trị vượt 100 thì chắc chắn không phải % — hạ về cột đếm */
- cols.forEach(c=>{if(c.pct){let mx=0;recs.forEach(r=>{const v=r.vals[c.name]||0;if(v>mx)mx=v;});if(mx>100)c.pct=false;}});
- return cols.length?{recs,cols}:null;}
-function slaAgg(rows,cols){const o={};cols.forEach(c=>{let s=0,n=0;rows.forEach(r=>{const v=r.vals[c.name];if(v||v===0){s+=v;n++;}});
- o[c.name]=c.pct?(n?s/n:0):s;});return o;}
-function slaFmt(c,v){if(!c.pct)return fmt(v);const x=v<=1?v*100:v;return x.toFixed(1)+'%';}
+const slaN=x=>{try{x=(''+x).normalize('NFC');}catch(e){x=''+x;}return x.replace(/\u00A0/g,' ').trim();};
+/* --- tab THEO THÁNG: CỘT = NGÀY (01/07…), các khối chỉ số theo hàng band, mỗi khối TỔNG + nhân sự --- */
+function parseSlaThang(rows){
+ if(!rows||rows.length<3)return null;
+ let HR=-1,iTot=-1,iAvg=-1,dateCols=null;
+ for(let r=0;r<Math.min(rows.length,12);r++){const row=rows[r]||[];
+  const iN=row.findIndex(x=>slaN(x).toLowerCase()==='ngày');if(iN<0)continue;
+  const cols=[];for(let c=iN+1;c<row.length;c++){const m=slaN(row[c]).match(/^(\d{1,2})\/(\d{1,2})(?:\/\d{4})?$/);
+   if(m){const dd=+m[1],mo=+m[2];if(mo>=1&&mo<=12&&dd>=1&&dd<=31)cols.push({ci:c,dk:dkey(mo-1,dd)});}}
+  if(cols.length>=5){HR=r;dateCols=cols;
+   iTot=row.findIndex(x=>/total|^tổng$/i.test(slaN(x)));
+   iAvg=row.findIndex(x=>/avg|bình\s*quân/i.test(slaN(x)));break;}}
+ if(HR<0)return null;
+ const lab=r=>{const row=rows[r]||[];for(let c=0;c<Math.min(row.length,4);c++){const v=slaN(row[c]);if(v)return v;}return '';};
+ const SS=[['ps',/đơn\s*phát\s*sinh/i],['ht',/đơn\s*hoàn\s*tất/i],['lt',/lead\s*time/i],['pc',/tỷ\s*lệ.*(kpi|leadtime)/i],['hy',/đơn\s*h[uủ]y/i]];
+ const marks=[];
+ for(let r=HR+1;r<rows.length;r++){const l=lab(r);if(!l)continue;
+  for(const[k,re]of SS){if(re.test(l)&&!marks.some(m=>m.k===k)){
+   const kpi=(rows[r]||[]).map(slaN).filter(x=>x&&!re.test(x)&&x.toLowerCase()!=='kpi').join(' ');
+   marks.push({k,r,kpi});break;}}}
+ if(!marks.length)return null;
+ const secEnd=r0=>{const nxt=marks.filter(m=>m.r>r0).sort((a,b)=>a.r-b.r)[0];return nxt?nxt.r:rows.length;};
+ const readBlock=r0=>{const out=[];for(let r=r0+1;r<secEnd(r0);r++){const row=rows[r]||[];
+   const daily={};let any=false;
+   dateCols.forEach(dc=>{const v=slaN(row[dc.ci]);if(v!==''){daily[dc.dk]=num(v);any=true;}});
+   const tot=iTot>=0?num(row[iTot]):0,avg=iAvg>=0?num(row[iAvg]):0;
+   if(!any&&!tot&&!avg)continue;
+   out.push({name:lab(r),tot,avg,daily});}
+  return out;};
+ const o={dateCols};marks.forEach(m=>{o[m.k]={kpi:m.kpi,rows:readBlock(m.r)};});
+ return (o.ht||o.ps)?o:null;}
+/* --- tab THEO NĂM: ma trận nhân sự × 12 tháng, hàng "Tổng NĂM" + hàng "Tháng" (1..12) --- */
+function parseSlaNam(rows){
+ if(!rows||rows.length<3)return null;
+ const lab=r=>{const row=rows[r]||[];for(let c=0;c<Math.min(row.length,3);c++){const v=slaN(row[c]);if(v)return v;}return '';};
+ let mrow=-1,mcols=null,totCol=-1;
+ for(let r=0;r<Math.min(rows.length,80);r++){
+  if(!/^tháng$/i.test(lab(r)))continue;
+  const row=rows[r]||[];const map={};
+  for(let c=0;c<row.length;c++){const v=slaN(row[c]);for(let k=1;k<=12;k++)if(v===''+k&&map[k]==null)map[k]=c;}
+  if(Object.keys(map).length>=6){mrow=r;mcols=map;totCol=(map[1]||1)-1;break;}}
+ if(mrow<0)return null;
+ let yTot=null,yByM=null;
+ for(let r=Math.max(0,mrow-4);r<=mrow;r++){if(/tổng\s*năm/i.test(lab(r))){const row=rows[r]||[];
+  yTot=num(row[totCol]);yByM=Array.from({length:12},(_,i)=>mcols[i+1]!=null?num(row[mcols[i+1]]):0);break;}}
+ const staff=[];
+ for(let r=mrow+1;r<rows.length;r++){const name=lab(r);if(!name||/^tổng/i.test(name))continue;
+  const row=rows[r]||[];const m=Array.from({length:12},(_,i)=>mcols[i+1]!=null?num(row[mcols[i+1]]):0);
+  const yr=num(row[totCol])||m.reduce((a,b)=>a+b,0);
+  if(yr>0||m.some(v=>v>0))staff.push({name,yr,m});}
+ if(!staff.length&&yByM==null)return null;
+ if(yByM==null){yByM=Array.from({length:12},(_,i)=>staff.reduce((a,st)=>a+st.m[i],0));yTot=yByM.reduce((a,b)=>a+b,0);}
+ return {yTot,yByM,staff:staff.sort((a,b)=>b.yr-a.yr)};}
 
 /* ===== PVH5: ma trận giá SKU × NCC — bình quân gia quyền trong khoảng lọc (Gift Card trước) ===== */
 const PRICECFG={gc:{gid:'1043029815',sp:'Gift Card',cur:'$'}};
