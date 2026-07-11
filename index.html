@@ -1,7 +1,15 @@
 <!DOCTYPE html>
 <html lang="vi">
 <head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#0b1a34">
+<link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Báo cáo PVH">
 <title>Trung tâm Báo cáo PVH · HQ </title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
@@ -220,6 +228,8 @@ async function sha256(t){const b=await crypto.subtle.digest('SHA-256',new TextEn
 async function doLogin(){const em=(document.getElementById('lgEmail').value||'').trim().toLowerCase();const pw=document.getElementById('lgPass').value||'';let h='';try{h=await sha256(pw);}catch(e){document.getElementById('lgErr').textContent="Trình duyệt chặn mã hoá (hãy mở qua https/Vercel).";return;}
  if(em===AUTH_EMAIL&&h===AUTH_HASH){MY_EMAIL=em;MY_ROLE='admin';MY_PAGES=ALL_PAGES.slice();try{sessionStorage.setItem('pvh_auth','1');sessionStorage.setItem('pvh_user',em);sessionStorage.setItem('pvh_role','admin');sessionStorage.setItem('pvh_pages',JSON.stringify(MY_PAGES));sessionStorage.removeItem('pvh_idtoken');}catch(e){}showApp();}
  else document.getElementById('lgErr').textContent="Email hoặc mật khẩu không đúng.";}
+if('serviceWorker' in navigator&&(location.protocol==='https:'||location.hostname==='localhost')){
+ window.addEventListener('load',()=>{navigator.serviceWorker.register('/sw.js').catch(()=>{});});}
 function doLogout(){
  try{['pvh_auth','pvh_user','pvh_role','pvh_pages','pvh_idtoken'].forEach(k=>sessionStorage.removeItem(k));}catch(e){}
  try{if(window.google&&google.accounts&&google.accounts.id)google.accounts.id.disableAutoSelect();}catch(e){}
