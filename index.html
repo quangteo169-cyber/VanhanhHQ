@@ -18,6 +18,12 @@
 }
 *{box-sizing:border-box;margin:0;padding:0}
 button,select,input{font-family:inherit}
+/* thanh kéo mỏng + gradient */
+*{scrollbar-width:thin;scrollbar-color:#2e86e6 transparent}
+*::-webkit-scrollbar{width:6px;height:6px}
+*::-webkit-scrollbar-track{background:transparent}
+*::-webkit-scrollbar-thumb{background:linear-gradient(180deg,#2e86e6,#22d3ee);border-radius:8px}
+*::-webkit-scrollbar-thumb:hover{background:linear-gradient(180deg,#4aa8f0,#22d3ee)}
 body{font-family:'Be Vietnam Pro',Arial,"Segoe UI",sans-serif;color:#e7effb;min-width:1220px;
  background:radial-gradient(1200px 600px at 78% -6%,rgba(30,95,208,.18),transparent 60%),radial-gradient(1000px 520px at 0% 100%,rgba(34,211,238,.14),transparent 55%),linear-gradient(160deg,var(--bg0),var(--bg1) 55%,var(--bg2));
  background-attachment:fixed;}
