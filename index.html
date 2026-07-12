@@ -910,7 +910,7 @@ const PAGES={
         scales:{x:noX,y:{...yG},y2:{position:'right',grid:{display:false},ticks:{callback:v=>v+'%'}}}}});});
    });
  }},
- PVH5:{title:"PVH5 · Biến động giá vốn theo NCC — Gift Card (SKU × NCC)",meta:"Ô = giá bình quân gia quyền ($) của SKU tại NCC trong khoảng lọc · chọn 1 ngày / 1 tuần / 1 tháng bằng Từ–Đến hoặc preset · ô xanh = NCC rẻ nhất",render(host){
+ PVH5:{title:"PVH5 · Biến động giá vốn theo NCC — Gift Card (SKU × NCC)",meta:"Ô = giá bình quân gia quyền ($) của SKU tại NCC trong khoảng lọc · loại dòng trạng thái Ngưng hoạt động · chọn 1 ngày / 1 tuần / 1 tháng bằng Từ–Đến hoặc preset · ô xanh = NCC rẻ nhất",render(host){
    host.innerHTML=spinner("Đang đọc Data giftcard và dựng ma trận giá SKU × NCC…");
    priceRecs('gc').then(R=>{
      if(!R){const sample=PRICED['gc_rows']||[];
@@ -938,6 +938,7 @@ const PAGES={
      const f2$=n=>n.toLocaleString('vi-VN',{minimumFractionDigits:2,maximumFractionDigits:2});
      const p5Ins=[
       `Trong kỳ có <b>${fmt(rowsD.length)} SKU</b> phát sinh giá từ <b>${nccs.length} NCC</b>; ${fmt(multi.length)} SKU so sánh được ≥2 NCC.`,
+      R._excl?`Đã loại <b>${fmt(R._excl)}</b> dòng có trạng thái "Ngưng hoạt động" — chỉ so giá các trạng thái còn lại.`:null,
       bestOrd[0]?`<b>${bestOrd[0]}</b> là NCC rẻ nhất ở <b>${bestCnt[bestOrd[0]]}/${multi.length}</b> SKU so sánh được${bestOrd.length>1?`; kế đến ${bestOrd.slice(1,3).map(n=>n+' ('+bestCnt[n]+')').join(', ')}`:''}.`:null,
       top?`Chênh giá mạnh nhất: <b>${top.sku}</b> — rẻ nhất tại <b>${top.best}</b> ($${f2$(top.mn)}), NCC cao nhất đắt hơn ${(top.spread*100).toFixed(1)}%.`:null,
       save>0.005&&paid>0?`Nếu dồn toàn bộ lượng mua kỳ này về NCC rẻ nhất của từng SKU, chi phí ước giảm <b>$${f2$(save)}</b> (${insAbs(save/paid)} tổng tiền mua) — tham khảo, chưa tính giới hạn nguồn hàng.`:null,
@@ -1306,29 +1307,35 @@ const PRICED={};
 function parsePriceRaw(rows){
  if(!rows||rows.length<2)return null;
  const norm=x=>{try{x=(''+x).normalize('NFC');}catch(e){x=''+x;}return x.replace(/\u00A0/g,' ').trim().toLowerCase();};
- let H=-1,iN=-1,iSku=-1,iNcc=-1,iGia=-1,iSl=-1,iLoai=-1;
+ let H=-1,iN=-1,iSku=-1,iNcc=-1,iGia=-1,iSl=-1,iLoai=-1,iTT=-1;
  for(let r=0;r<Math.min(rows.length,30);r++){const row=(rows[r]||[]).map(norm);
   const d=row.findIndex(x=>/ngày/.test(x));
   const k=row.findIndex(x=>/danh\s*mục|sku/.test(x));
   const n=row.findIndex(x=>/^ncc$|nhà\s*cung\s*cấp/.test(x));
   const g=row.findIndex(x=>/đơn\s*giá/.test(x));
   if(d>-1&&k>-1&&n>-1&&g>-1){H=r;iN=d;iSku=k;iNcc=n;iGia=g;
-   iSl=row.findIndex(x=>(/số\s*lượng|^sl$/.test(x))&&!/dùng/.test(x));break;}}
+   iSl=row.findIndex(x=>(/số\s*lượng|^sl$/.test(x))&&!/dùng/.test(x));
+   iTT=row.findIndex(x=>/trạng\s*thái/.test(x));break;}}
  if(H<0){H=0;iN=13;iSku=8;iNcc=5;iGia=10;iSl=-1;iLoai=3;} /* fallback: chỉ số cột đã verify trước đây */
  else{/* dò cột "thêm mới code" theo dữ liệu (cột loại giao dịch) */
   const cnt={};for(let r=H+1;r<Math.min(rows.length,H+400);r++){const row=rows[r]||[];
    for(let c=0;c<row.length;c++)if(/thêm\s*mới\s*code/i.test(''+row[c]))cnt[c]=(cnt[c]||0)+1;}
   let best=-1,bn=0;Object.keys(cnt).forEach(c=>{if(cnt[c]>bn){bn=cnt[c];best=+c;}});iLoai=best;}
- const recs=[];
+ if(iTT<0){/* không có header Trạng thái → dò cột theo dữ liệu ("hoạt động"/"ngưng hoạt động") */
+  const cnt={};for(let r=H+1;r<Math.min(rows.length,H+400);r++){const row=rows[r]||[];
+   for(let c=0;c<row.length;c++)if(/ho[aạ]t\s*động/i.test(norm(row[c]||'')))cnt[c]=(cnt[c]||0)+1;}
+  let best=-1,bn=0;Object.keys(cnt).forEach(c=>{if(cnt[c]>bn){bn=cnt[c];best=+c;}});iTT=best;}
+ const recs=[];let excl=0;
  for(let r=H+1;r<rows.length;r++){const row=rows[r];if(!row)continue;
   if(iLoai>=0&&!/thêm\s*mới\s*code/i.test(''+(row[iLoai]||'')))continue; /* chỉ dòng nhập code mới */
+  if(iTT>=0&&/ng[ưừ]ng\s*ho[aạ]t\s*động/i.test(norm(row[iTT]||''))){excl++;continue;} /* bỏ trạng thái Ngưng hoạt động */
   const dt=parseDateCell(row[iN]);if(!dt)continue;
   const sku=(''+(row[iSku]||'')).trim();if(!sku)continue;
   const ncc=(''+(row[iNcc]||'')).trim();if(!ncc)continue;
   const gia=num(row[iGia]);if(!(gia>0))continue;
   const sl=iSl>=0?(num(row[iSl])||1):1;
   recs.push({dk:dkey(dt.mo,dt.d),sku,ncc,gia,sl});}
- return recs.length?recs:null;}
+ if(!recs.length)return null;recs._excl=excl;return recs;}
 async function priceRecs(key){const cfg=PRICECFG[key];if(PRICED[key]!==undefined)return PRICED[key];
  let rows=await loadCSV(directURL(cfg.gid));let R=parsePriceRaw(rows);
  if(!R){const r2=await loadCSV(apiURL(cfg.gid));if(r2)rows=r2;R=parsePriceRaw(r2);}
