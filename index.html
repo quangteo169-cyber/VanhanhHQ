@@ -178,6 +178,11 @@ select:focus{outline:none;border-color:var(--cyan);box-shadow:0 0 10px rgba(34,2
  .strip>span[style*="margin-left:auto"]{margin-left:0!important;width:100%}
  .pgpick>summary{min-width:150px}
 }
+/* card diễn giải & phân tích tự động */
+.insight{background:linear-gradient(160deg,#f6f9ff,#eef4ff);border-left:3px solid #1e5fd0}
+.insight h3{text-align:left;color:#0b3a8f}
+.insight ul{margin:4px 0 0 20px;display:flex;flex-direction:column;gap:7px;font-size:12.8px;line-height:1.6}
+.insight li::marker{color:#1e5fd0}
 </style>
 </head>
 <body>
@@ -570,9 +575,19 @@ function renderGroupReport(host,cfg){
    const sheetT=tots[sp]?tmn.reduce((a,mi)=>a+(tots[sp][mi]||0),0):null;
    /* ô tổng hiển thị THEO HÀNG TỔNG SHEET khi khối có hàng tổng; cộng chi tiết chỉ dùng đối soát */
    agg[sp]={list,tot,sheetT,disp:sheetT!=null?sheetT:tot};});
+ /* diễn giải tự động theo từng SPDV */
+ const gIns=[];
+ (()=>{const all=sps.map(sp=>[sp,agg[sp].disp]).sort((a,b)=>b[1]-a[1]);const allT=all.reduce((a,x)=>a+x[1],0);
+   if(all.length>1&&allT>0)gIns.push(`Trong ${sps.length} SPDV, <b>${all[0][0]}</b> có CO Nhập lớn nhất: ${fmt(all[0][1])} (${pct(all[0][1]/allT)} tổng).`);
+   sps.forEach(sp=>{const L=agg[sp].list;if(!L.length)return;
+     const mSer=tmn.map(mi=>(tots[sp]?(tots[sp][mi]||0):src[sp].reduce((a,x)=>a+(x[1][mi]||0),0)));
+     const st=insSeries(mSer);
+     const t2=L.slice(0,2).reduce((a,x)=>a+x[1],0);
+     gIns.push(`<b>${sp}</b>: dẫn đầu là <b>${L[0][0]}</b> chiếm ${pct(L[0][1]/(agg[sp].tot||1))}${L.length>1?`, top 2 gộp ${pct(t2/(agg[sp].tot||1))} trong ${L.length} ${cfg.unit}`:` (${cfg.unit} duy nhất)`}${tmn.length>1&&st&&st.mom!=null?`; tháng gần nhất ${insUD(st.mom)} so tháng trước`:''}${tmn.length>1&&st?`; cao nhất ${insT(tmn,st.hi)}`:''}.`);});
+   const nt=insNote(tmn);if(nt)gIns.push(nt);})();
  let h=`<div class="small" style="margin-bottom:10px">Phạm vi ${scopeLabel()} · CO Nhập theo ${cfg.unit} (cộng trọn tháng chạm khoảng: ${tmn.map(m=>'T'+(m+1)).join('+')}) · ${sps.length} SPDV · bấm <b>Cả kỳ</b> để khớp cột "2026"</div>`;
  h+=`<div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr))">${sps.map(sp=>kpi('Tổng CO Nhập · '+sp,fmt(agg[sp].disp),agg[sp].list.length+' '+cfg.unit+' · top: '+(agg[sp].list[0]?agg[sp].list[0][0]:'—')+(agg[sp].sheetT!=null?' · theo hàng tổng sheet':''))).join('')}</div>`;
- h+='<div class="grid2">';
+ h+=insightCard(gIns);h+='<div class="grid2">';
  sps.forEach((sp,idx)=>{
    const list=agg[sp].list,tot=agg[sp].tot,sheetT=agg[sp].sheetT;
    const diff=sheetT!=null?tot-sheetT:null;
@@ -595,6 +610,26 @@ function renderGroupReport(host,cfg){
  sps.forEach((sp,idx)=>{const list=agg[sp].list.slice(0,10);mk(cfg.pfx+"_"+idx,{type:'bar',data:{labels:list.map(x=>x[0]),datasets:[{data:list.map(x=>x[1]),backgroundColor:list.map((_,i)=>i===0?'#0b3a8f':(i<4?'#1e5fd0':'#4aa8f0'))}]},options:hbarOpt()});});
 }
 
+/* ===== DIỄN GIẢI & PHÂN TÍCH TỰ ĐỘNG (sinh từ số liệu trong phạm vi lọc) ===== */
+function insightCard(items,title){const it=(items||[]).filter(Boolean);if(!it.length)return '';
+ return `<div class="card insight"><h3>🔎 Diễn giải & phân tích tự động${title?' — '+title:''}</h3><ul>${it.map(t=>`<li>${t}</li>`).join('')}</ul><div class="small" style="margin-top:7px">Nhận định sinh tự động từ số liệu trong phạm vi lọc — đổi Từ ngày/Đến ngày sẽ cập nhật theo.</div></div>`;}
+const insAbs=x=>(Math.abs(x)*100).toFixed(1)+'%';
+/* mô tả tăng/giảm có màu; bad=true khi TĂNG là xấu (thiệt hại, giá vốn) */
+function insUD(x,bad){if(!isFinite(x)||x===0)return '<span class="flat">đi ngang</span>';
+ const c=(x>0)===!bad?'up':'down';return `<span class="${c}">${x>0?'tăng':'giảm'} ${insAbs(x)}</span>`;}
+/* thống kê 1 chuỗi theo tháng: đỉnh/đáy, chuỗi tăng/giảm liên tiếp cuối kỳ, %MoM cuối */
+function insSeries(vals){const n=vals.length;if(!n)return null;
+ let hi=0,lo=0;vals.forEach((v,i)=>{if(v>vals[hi])hi=i;if(v<vals[lo])lo=i;});
+ let k=0,dir=0;for(let i=n-1;i>0;i--){const d=Math.sign(vals[i]-vals[i-1]);if(!d)break;if(!dir)dir=d;if(d!==dir)break;k++;}
+ const mom=n>1&&vals[n-2]?vals[n-1]/vals[n-2]-1:null;
+ return {hi,lo,k,dir,mom};}
+const insT=(tmn,i)=>'T'+pad2(tmn[i]+1);
+/* chú thích khi tháng cuối trong phạm vi CHƯA trọn tháng (đang chạy) — tránh đọc nhầm "giảm sâu" */
+function insNote(tmn){if(!tmn||!tmn.length)return null;const t=TD,last=tmn[tmn.length-1];
+ if(t.y===2026&&last===t.mo&&t.d<new Date(t.y,t.mo+1,0).getDate())
+  return `<i>Lưu ý: T${pad2(last+1)} mới có số đến ${pad2(t.d)}/${pad2(t.mo+1)} (chưa trọn tháng) — các mức giảm so tháng này chỉ mang tính tham khảo.</i>`;
+ return null;}
+
 const PAGES={
  TQ:{title:"Tổng quan vận hành",meta:"Nguồn: Data theo SPDV — Nhập · Xuất · Thiệt hại · Dồn · Tồn theo tháng",render(host){
    const sc=scopeData();const prev=prevScope(scopeData);const mom=prev&&prev.totalNhap?sc.totalNhap/prev.totalNhap-1:0;
@@ -603,12 +638,32 @@ const PAGES={
    /* chỉ đưa vào biểu đồ các SPDV có phát sinh trong phạm vi (Topup=0 tự ẩn) */
    const ST=SPDV.filter(s=>tmn.some(mi=>((NHAP[s]&&NHAP[s][mi])||0)>0||((XUAT[s]&&XUAT[s][mi])||0)>0||((DIE[s]&&DIE[s][mi])||0)>0));
    const dss=SRC=>ST.filter(s=>SRC[s]).map(s=>({label:shortSP(s),data:tmn.map(mi=>SRC[s][mi]||0),backgroundColor:SPCOL[s],stack:'s'}));
+   const nhapM=tmn.map(mi=>SPDV.reduce((a,s)=>a+((NHAP[s]&&NHAP[s][mi])||0),0));
+   const dieM=tmn.map(mi=>SPDV.reduce((a,s)=>a+((DIE[s]&&DIE[s][mi])||0),0));
+   const sN=insSeries(nhapM),sD=insSeries(dieM);
+   const shr=[...SPDV].map(s=>[s,sc.nhap[s]||0]).sort((a,b)=>b[1]-a[1]);
+   const top3=shr.slice(0,3).reduce((a,x)=>a+x[1],0);
+   let mvUp=null,mvDn=null;
+   if(tmn.length>1){const a=tmn[tmn.length-2],b=tmn[tmn.length-1];
+     SPDV.forEach(s=>{const p=(NHAP[s]&&NHAP[s][a])||0,q=(NHAP[s]&&NHAP[s][b])||0;if(p>1e6){const r=q/p-1;if(!mvUp||r>mvUp[1])mvUp=[s,r];if(!mvDn||r<mvDn[1])mvDn=[s,r];}});}
+   const wDie=[...SPDV].map(s=>[s,sc.die[s]||0]).sort((a,b)=>b[1]-a[1])[0];
+   const tqIns=[
+     `Tổng CO Nhập <b>${fmt(sc.totalNhap)}</b>${prev&&prev.totalNhap?` — ${insUD(mom)} so với kỳ liền trước (${fmt(prev.totalNhap)})`:''}; CO Xuất <b>${fmt(sc.totalXuat)}</b> = ${pct(sc.totalXuat/(sc.totalNhap||1))} lượng nhập.`,
+     tmn.length>1&&sN?`Nhập theo tháng: cao nhất <b>${insT(tmn,sN.hi)}</b> (${fmt(nhapM[sN.hi])}), thấp nhất <b>${insT(tmn,sN.lo)}</b> (${nhapM[sN.lo]?fmt(nhapM[sN.lo]):'0'})${sN.mom!=null?`; tháng gần nhất ${insUD(sN.mom)} so tháng trước`:''}${sN.k>=2?`; đã ${sN.dir>0?'tăng':'giảm'} <b>${sN.k} tháng liên tiếp</b>`:''}.`:null,
+     shr[0]&&shr[0][1]>0?`Cơ cấu nhập: <b>${shr[0][0]}</b> dẫn đầu (${pct(shr[0][1]/(sc.totalNhap||1))}); top 3 (${shr.slice(0,3).map(x=>shortSP(x[0])).join(', ')}) chiếm ${pct(top3/(sc.totalNhap||1))}.`:null,
+     mvUp&&mvUp[1]>0.03?`So 2 tháng gần nhất: <b>${mvUp[0]}</b> ${insUD(mvUp[1])} mạnh nhất${mvDn&&mvDn[1]<-0.03?`; <b>${mvDn[0]}</b> ${insUD(mvDn[1])} sâu nhất`:''}.`:(mvDn&&mvDn[1]<-0.03?`So 2 tháng gần nhất: <b>${mvDn[0]}</b> ${insUD(mvDn[1])} sâu nhất.`:null),
+     `Thiệt hại <b>${fmt(sc.totalDie)}</b> (Gross Loss ${pct(sc.totalDie/(sc.totalNhap||1))})${wDie&&wDie[1]>0?`, tập trung ở <b>${wDie[0]}</b> (${pct(wDie[1]/(sc.totalDie||1))})`:''}${sD&&sD.mom!=null?`; tháng gần nhất ${insUD(sD.mom,true)}`:''}.`,
+     sc.don>0?`Robux Dồn thu hồi <b>${fmt(sc.don)}</b> — bù lại ${pct(sc.don/((sc.don+sc.totalDie)||1))} tổng lượng die+dồn.`:null,
+     sc.ton?`Tổng CO Tồn cộng các tháng trong phạm vi: <b>${fmt(sc.ton)}</b>.`:null,
+     insNote(tmn),
+   ];
    host.innerHTML=`<div class="kpis" style="grid-template-columns:repeat(5,1fr)">
      ${kpi("Tổng CO Nhập",fmt(sc.totalNhap),prev&&prev.totalNhap?`<span class="${cls(mom)}">${arrow(mom)}kỳ trước ${pct(mom)}</span>`:scopeLabel())}
      ${kpi("Tổng CO Xuất",fmt(sc.totalXuat),"trong phạm vi lọc")}
      ${kpi("Robux Dồn (thu hồi)",fmt(sc.don),"tái sử dụng")}
      ${kpi("Thiệt hại (die/lỗi)",fmt(sc.totalDie),"Gross Loss "+pct(sc.totalDie/(sc.totalNhap||1)))}
      ${kpi("Tổng CO Tồn",sc.ton?fmt(sc.ton):"—",sc.ton?"cộng các tháng trong phạm vi":"sheet chưa có số / chưa LIVE")}</div>
+    ${insightCard(tqIns)}
     <div class="grid2" style="grid-template-columns:1fr 1fr">${cc("Tổng CO Nhập theo SPDV — theo tháng","tq1")}${cc("Tổng CO Xuất theo SPDV — theo tháng","tq2")}</div>
     <div class="grid2" style="grid-template-columns:1fr 1.4fr">${cc("Tỉ trọng CO Nhập theo SPDV — "+scopeLabel(),"tq3")}${cc("Thiệt hại theo SPDV — theo tháng","tq4")}</div>`;
    mk("tq1",stackCfg(lbl,dss(NHAP)));
@@ -618,11 +673,23 @@ const PAGES={
  }},
  PVH2:{title:"PVH2 · Dồn & Die theo SPDV",meta:"Tần suất: Tháng/Tuần/Ngày",render(host){
    const sc=scopeData();const dieT=sc.totalDie;
+   const tmn2=Object.keys(monthsInRange()).map(Number).sort((a,b)=>a-b);
+   const dieM2=tmn2.map(mi=>Object.keys(DIE).reduce((a,s)=>a+((DIE[s]&&DIE[s][mi])||0),0));
+   const donM2=tmn2.map(mi=>DON.Robux[mi]||0);
+   const sD2=insSeries(dieM2),sDon=insSeries(donM2);
+   const wD=[...SPDV].map(s=>[s,sc.die[s]||0]).sort((a,b)=>b[1]-a[1])[0];
+   const p2Ins=[
+    `Tổng Die/Thiệt hại <b>${fmt(dieT)}</b> trong ${scopeLabel()}${wD&&wD[1]>0?`, lớn nhất ở <b>${wD[0]}</b> (${pct(wD[1]/(dieT||1))} tổng die)`:''}.`,
+    tmn2.length>1&&sD2?`Xu hướng die theo tháng: đỉnh <b>${insT(tmn2,sD2.hi)}</b> (${fmt(dieM2[sD2.hi])}), đáy <b>${insT(tmn2,sD2.lo)}</b> (${dieM2[sD2.lo]?fmt(dieM2[sD2.lo]):'0'})${sD2.mom!=null?`; tháng gần nhất ${insUD(sD2.mom,true)}`:''}${sD2.k>=2?`; đã ${sD2.dir>0?'tăng':'giảm'} <b>${sD2.k} tháng liên tiếp</b>`:''}.`:null,
+    sc.don>0?`Robux Dồn thu hồi <b>${fmt(sc.don)}</b>${sDon&&sDon.mom!=null?` — tháng gần nhất ${insUD(sDon.mom)}`:''}; tỷ lệ mất thực Die/(Die+Dồn) = <b>${pct(dieT/((dieT+sc.don)||1))}</b>.`:null,
+    insNote(tmn2),
+   ];
    host.innerHTML=`<div class="kpis">
      ${kpi("Tổng Die / Thiệt hại",fmt(dieT),scopeLabel())}
      ${kpi("Die Robux",fmt(sc.die["Robux"]),"lớn nhất")}
      ${kpi("Robux Dồn (thu hồi)",fmt(sc.don),"tái sử dụng")}
      ${kpi("Die / (Die+Dồn)",pct(dieT/((dieT+sc.don)||1)),"tỷ lệ mất thực")}</div>
+    ${insightCard(p2Ins)}
     <div class="grid3">${cc("Die theo SPDV","p1a")}${cc("Die theo "+lvl(),"p1b")}${cc("Dồn Robux theo "+lvl(),"p1c")}</div>
     <div class="card"><h3>Bảng Die & Dồn theo SPDV — ${scopeLabel()}</h3><div class="scroll"><table class="tbl"><thead><tr><th>SPDV</th><th class="n">Die</th><th class="n">Dồn</th></tr></thead><tbody>
     ${SPDV.map(s=>`<tr><td>${s}</td><td class="n">${fmtn(sc.die[s])}</td><td class="n">${s==='Robux'?fmtn(sc.don):'-'}</td></tr>`).join('')}</tbody></table></div></div>`;
@@ -637,8 +704,17 @@ const PAGES={
  }},
  PVH8:{title:"PVH8 · Thất thoát / Gross Loss",meta:"★ BOD · Tháng/Ngày",render(host){
    const sc=scopeData();const gl=sc.totalDie/(sc.totalNhap||1);
+   const tmn8=Object.keys(monthsInRange()).map(Number).sort((a,b)=>a-b);
+   const glM=tmn8.map(mi=>{const n=monthNhap(mi)||0;const d=Object.keys(DIE).reduce((a,s)=>a+((DIE[s]&&DIE[s][mi])||0),0);return n?d/n:0;});
+   const s8=insSeries(glM);
+   const p8Ins=[
+    `Gross Loss kỳ này = <b>${pct(gl)}</b> (thiệt hại ${fmt(sc.totalDie)} trên CO Nhập ${fmt(sc.totalNhap)}).`,
+    tmn8.length>1&&s8?`GL cao nhất <b>${insT(tmn8,s8.hi)}</b> (${pct(glM[s8.hi])}), thấp nhất <b>${insT(tmn8,s8.lo)}</b> (${pct(glM[s8.lo])})${s8.mom!=null?`; tháng gần nhất ${insUD(s8.mom,true)}`:''}.`:null,
+    insNote(tmn8),
+   ];
    host.innerHTML=`<div class="note">★ Gross Loss = Thiệt hại / CO Nhập (theo phạm vi). Chưa gộp lệch đối soát &amp; chi phí hoàn.</div>
     <div class="kpis" style="margin-top:12px">${kpi("Gross Loss",pct(gl),scopeLabel())}${kpi("Tổng thiệt hại",fmt(sc.totalDie),"")}${kpi("CO Nhập",fmt(sc.totalNhap),"mẫu số")}${kpi("Die/Robux",fmt(sc.die["Robux"]),"lớn nhất")}</div>
+    ${insightCard(p8Ins)}
     <div class="grid2">${cc("% Gross Loss theo "+(window._m<0?"tháng":"ngày"),"p8a")}${cc("Thiệt hại theo SPDV","p8b")}</div>`;
    const trN=trend(monthNhap,7),trD=trend(m=>Object.keys(DIE).reduce((a,s)=>a+DIE[s][m],0),7);
    const glv=trN.values.map((v,i)=>v?+(trD.values[i]/v*100).toFixed(3):0);
@@ -689,6 +765,14 @@ const PAGES={
          const ps0=T.ps&&T.ps.rows[0],htT=tong(T.ht),ltT=tong(T.lt),pcT=tong(T.pc),hy0=T.hy&&T.hy.rows[0];
          const psS=sum(ps0),htS=sum(htT),ltM=meanPos(ltT),pcM=meanPos(pcT),hyS=sum(hy0);
          const f1=n=>n.toLocaleString('vi-VN',{minimumFractionDigits:1,maximumFractionDigits:1});
+         const stf=staffOf(T.ht).map(st=>[st.name,sum(st)]).filter(x=>x[1]>0).sort((a,b)=>b[1]-a[1]);
+         let pk=null;days.forEach(dc=>{const v=ps0?(ps0.daily[dc.dk]||0):0;if(!pk||v>pk[1])pk=[dc.dk,v];});
+         const p10Ins=[
+          `Trong ${days.length} ngày: phát sinh <b>${fmt(psS)}</b> đơn, hoàn tất <b>${fmt(htS)}</b> (bình quân ${fmt(Math.round(htS/(days.length||1)))} đơn/ngày); hủy ${fmt(hyS)} đơn.`,
+          pk&&pk[1]>0?`Ngày cao điểm: <b>${pk[0].slice(8,10)}/${pk[0].slice(5,7)}</b> với ${fmt(pk[1])} đơn phát sinh.`:null,
+          `Lead time trung bình <b>${f1(ltM)} h</b> — <span class="${ltM<=4?'up':'down'}">${ltM<=4?'đạt':'vượt'} KPI ${T.lt&&T.lt.kpi?T.lt.kpi:'≤4h'}</span>; tỷ lệ đạt KPI lead time <b>${f1(pcM)}%</b> <span class="${pcM>=85?'up':'down'}">(${pcM>=85?'trên':'dưới'} mốc ${T.pc&&T.pc.kpi?T.pc.kpi:'85%'})</span>.`,
+          stf[0]?`Nhân sự xử lý nhiều nhất: <b>${stf[0][0]}</b> (${fmt(stf[0][1])} đơn = ${pct(stf[0][1]/(htS||1))})${stf.length>1?`; kế đến ${stf.slice(1,3).map(x=>x[0]+' ('+fmt(x[1])+')').join(', ')}`:''}.`:null,
+         ];
          h+=`<div class="small" style="margin-bottom:10px">Báo cáo ngày — ${days.length} ngày trong phạm vi ${scopeLabel()} · KPI lấy từ file: Hoàn tất ${T.ht?T.ht.kpi:''} · Lead time ${T.lt?T.lt.kpi:''} · Đạt KPI ${T.pc?T.pc.kpi:''}</div>
           <div class="kpis" style="grid-template-columns:repeat(5,1fr)">
            ${kpi("Đơn phát sinh",fmt(psS),"trong phạm vi")}
@@ -697,6 +781,7 @@ const PAGES={
            ${kpi("Tỷ lệ đạt KPI leadtime",f1(pcM)+"%",`<span class="${pcM>=85?'up':'down'}">${pcM>=85?'✓ đạt':'✗ dưới'} mức ${T.pc?T.pc.kpi:'>85%'}</span>`)}
            ${kpi("Đơn hủy",fmt(hyS),"trong phạm vi")}
           </div>
+          ${insightCard(p10Ins)}
           <div class="grid2" style="grid-template-columns:1.5fr 1fr">
            ${cc("Đơn phát sinh vs hoàn tất theo ngày","p10a")}
            <div class="card"><h3>Năng suất nhân sự — kỳ lọc</h3><div class="scroll" style="max-height:250px"><table class="tbl"><thead><tr><th>Nhân sự</th><th class="n">Hoàn tất</th><th class="n">Lead TB (h)</th><th class="n">% đạt KPI</th></tr></thead><tbody>
@@ -778,6 +863,18 @@ const PAGES={
        const hi=ms.reduce((a,m)=>m.gv>a.gv?m:a,ms[0]),lo=ms.reduce((a,m)=>m.gv<a.gv?m:a,ms[0]);
        const gvUnit=cfg.cur+'/'+cfg.unit;
        charts.push({id:pfx,ms,bq,dec:cfg.dec,gvUnit});
+       const momsL=ms.map((m,j)=>j>0?(m.gv-ms[j-1].gv)/ms[j-1].gv:null);
+       let big=null;ms.forEach((m,j)=>{if(momsL[j]!=null&&(big==null||Math.abs(momsL[j])>Math.abs(momsL[big])))big=j;});
+       let stk=0,sd=0;for(let j=ms.length-1;j>0;j--){const d=Math.sign(ms[j].gv-ms[j-1].gv);if(!d)break;if(!sd)sd=d;if(d!==sd)break;stk++;}
+       const vsBQ=bq?last.gv/bq-1:0;
+       const insC=[
+        `Giá vốn T${pad2(last.mi+1)} = <b>${fm(last.gv)} ${gvUnit}</b>${prev2?` — ${insUD(mom,true)} so với T${pad2(prev2.mi+1)} (${fm(prev2.gv)})`:''}.`,
+        `So bình quân năm ${fm(bq)}: tháng hiện tại <b>${vsBQ>=0?'cao hơn':'thấp hơn'} ${insAbs(vsBQ)}</b>.`,
+        `Đỉnh <b>T${pad2(hi.mi+1)}</b> (${fm(hi.gv)}) — đáy <b>T${pad2(lo.mi+1)}</b> (${fm(lo.gv)}); biên độ dao động cả kỳ ${insAbs(lo.gv?hi.gv/lo.gv-1:0)}.`,
+        stk>=2?`Giá vốn đã <span class="${sd>0?'down':'up'}">${sd>0?'tăng':'giảm'} ${stk} tháng liên tiếp</span>.`:null,
+        big!=null&&momsL[big]!=null&&ms.length>2?`Biến động mạnh nhất: <b>T${pad2(ms[big].mi+1)}</b> ${insUD(momsL[big],true)} so tháng liền trước.`:null,
+        insNote(ms.map(m=>m.mi)),
+       ];
        return `
       <div class="kpis" style="grid-template-columns:repeat(5,1fr)">
        ${kpi(cfg.sp+" — GV T"+pad2(last.mi+1),fm(last.gv),prev2?`<span class="${cls(mom)}">${arrow(mom)}${pct(Math.abs(mom))} so T${pad2(prev2.mi+1)}</span> · ${gvUnit}`:gvUnit)}
@@ -786,6 +883,7 @@ const PAGES={
        ${kpi("Tổng mua cả kỳ",fmoney(totT)+" "+cfg.cur,fmt(totS)+" "+cfg.unit+" · "+fmt(ms.reduce((a,m)=>a+m.rows,0))+" dòng"+(cfg.cur==='USD'?" · ≈ "+fmt(totT*27000)+" đ (×27.000)":""))}
        ${kpi("Đã loại ("+cfg.don+")",fmt(totDon)+" "+cfg.unit,totDonRows+" dòng tiền = 0 — không tính vào GV")}
       </div>
+      ${insightCard(insC,cfg.sp)}
       <div class="grid2" style="grid-template-columns:1.5fr 1fr">
        ${cc(cfg.sp+" — giá vốn ĐV theo tháng ("+gvUnit+") · đường đứt: BQ năm · cột: %MoM","c_"+pfx)}
        <div class="card"><h3>${cfg.sp} — chi tiết theo tháng</h3><div class="scroll" style="max-height:240px"><table class="tbl"><thead><tr><th>Tháng</th><th class="n">Dòng mua</th><th class="n">SL nhập</th><th class="n">Thành tiền (${cfg.cur==='USD'?'USD':'VND'})</th><th class="n">GV ĐV</th><th class="n">Δ MoM</th><th class="n">%MoM</th><th class="n">So BQ</th><th class="n">SL loại</th></tr></thead><tbody>
@@ -833,6 +931,17 @@ const PAGES={
      window._p5={rowsD,nccs};
      const multi=rowsD.filter(r=>r.cnt>1);
      const top=multi[0];
+     const bestCnt={};multi.forEach(r=>{bestCnt[r.best]=(bestCnt[r.best]||0)+1;});
+     const bestOrd=Object.keys(bestCnt).sort((a,b)=>bestCnt[b]-bestCnt[a]);
+     let paid=0,minCost=0;rowsD.forEach(r=>{nccs.forEach(n=>{const c=skus[r.sku][n];if(c){paid+=c.v;minCost+=r.mn*c.w;}});});
+     const save=paid-minCost;
+     const f2$=n=>n.toLocaleString('vi-VN',{minimumFractionDigits:2,maximumFractionDigits:2});
+     const p5Ins=[
+      `Trong kỳ có <b>${fmt(rowsD.length)} SKU</b> phát sinh giá từ <b>${nccs.length} NCC</b>; ${fmt(multi.length)} SKU so sánh được ≥2 NCC.`,
+      bestOrd[0]?`<b>${bestOrd[0]}</b> là NCC rẻ nhất ở <b>${bestCnt[bestOrd[0]]}/${multi.length}</b> SKU so sánh được${bestOrd.length>1?`; kế đến ${bestOrd.slice(1,3).map(n=>n+' ('+bestCnt[n]+')').join(', ')}`:''}.`:null,
+      top?`Chênh giá mạnh nhất: <b>${top.sku}</b> — rẻ nhất tại <b>${top.best}</b> ($${f2$(top.mn)}), NCC cao nhất đắt hơn ${(top.spread*100).toFixed(1)}%.`:null,
+      save>0.005&&paid>0?`Nếu dồn toàn bộ lượng mua kỳ này về NCC rẻ nhất của từng SKU, chi phí ước giảm <b>$${f2$(save)}</b> (${insAbs(save/paid)} tổng tiền mua) — tham khảo, chưa tính giới hạn nguồn hàng.`:null,
+     ];
      host.innerHTML=`
       <div class="kpis">
        ${kpi("SKU có giá trong kỳ",fmt(rowsD.length),scopeLabel())}
@@ -840,6 +949,7 @@ const PAGES={
        ${kpi("SKU so được ≥2 NCC",fmt(multi.length),"có thể chọn NCC rẻ nhất")}
        ${kpi("Chênh giá mạnh nhất",top?(top.spread*100).toFixed(1)+"%":"—",top?top.sku.slice(0,40):"chưa có SKU nào ≥2 NCC")}
       </div>
+      ${insightCard(p5Ins)}
       <div class="card"><h3>Ma trận giá SKU × NCC — ${scopeLabel()}</h3>
        <div class="row" style="margin-bottom:8px"><input id="p5q" placeholder="Tìm SKU / danh mục…" style="flex:1;max-width:340px;padding:8px 12px;border:1px solid #c9d6ea;border-radius:8px;font-size:13px" oninput="window._p5q=this.value;renderP5Table()">
         <span class="small">Ô <span style="background:#dcfce7;color:#166534;padding:1px 7px;border-radius:4px;font-weight:bold">xanh</span> = NCC rẻ nhất của SKU (khi có ≥2 NCC) · Chênh % = (đắt nhất − rẻ nhất) ÷ rẻ nhất</span></div>
@@ -872,6 +982,13 @@ const PAGES={
      const ds=sheetTot==null?'':(Math.abs(diff)<=Math.max(1,Math.round(sheetTot*0.001))
        ?`<span style="color:#4ade80">✓ khớp "Tổng tồn" trên file (${fmt(sheetTot)})</span>`
        :`<span style="color:#fb7185">≠ "Tổng tồn" trên file ${fmt(sheetTot)} (lệch ${fmt(diff)})</span>`);
+     const fresh=rowsD.reduce((a,r)=>a+r.bk[0],0);
+     const wOld=[...rowsD].sort((a,b)=>b.bk[3]-a.bk[3])[0];
+     const p6Ins=[
+      `Kho đang giữ <b>${fmt(totN)} code</b> thuộc ${rowsD.length} danh mục, tổng <b>${fmt(totVnd)} đ</b>; lớn nhất là <b>${rowsD[0].cat}</b> (${pct(rowsD[0].vnd/(totVnd||1))} giá trị kho).`,
+      `Tuổi tồn bình quân <b>${f1(totAge)} ngày</b>; hàng mới ≤30 ngày chiếm ${pct(fresh/(totVnd||1))}, hàng tồn >90 ngày chiếm <b>${pct(old90/(totVnd||1))}</b> giá trị.`,
+      wOld&&wOld.bk[3]>0?`Tồn lâu tập trung ở <b>${wOld.cat}</b>: ${fmt(wOld.bk[3])} đ giá trị >90 ngày (${pct(wOld.bk[3]/(old90||1))} nhóm quá 90 ngày) — ưu tiên xả trước.`:null,
+     ];
      host.innerHTML=`
       <div class="kpis" style="grid-template-columns:repeat(5,1fr)">
        ${kpi("Tổng CO tồn (VND)",fmt(totVnd),ds||("tỷ giá "+fmt(fx)))}
@@ -880,6 +997,7 @@ const PAGES={
        ${kpi("Tồn > 90 ngày",fmt(old90),pct(old90/(totVnd||1))+" giá trị kho — ưu tiên xả")}
        ${kpi("DPO — công nợ NCC","(đợt sau)","Days Payable Outstanding — chờ nguồn")}
       </div>
+      ${insightCard(p6Ins)}
       <div class="grid2" style="grid-template-columns:1fr 1.2fr">${cc("CO tồn (VND) theo danh mục — top 12","p6a")}${cc("Phân bổ tuổi tồn theo giá trị (VND) — xanh ≤30n · vàng 31–60 · cam 61–90 · đỏ >90","p6b")}</div>
       <div class="card"><h3>Tồn kho & tuổi tồn theo danh mục — ${rowsD.length} danh mục · ${fmt(totN)} code</h3><div class="scroll" style="max-height:460px"><table class="tbl"><thead><tr><th>Danh mục</th><th class="n">SL code</th><th class="n">CO tồn ($)</th><th class="n">CO tồn (VND)</th><th class="n">Tỷ trọng</th><th class="n">Tuổi BQ (ngày)</th><th class="n">Lâu nhất</th><th class="n">% giá trị >90n</th></tr></thead><tbody>
       ${rowsD.map(r=>`<tr><td>${r.cat}</td><td class="n">${fmt(r.n)}</td><td class="n">${f2(r.usd)}</td><td class="n">${fmt(r.vnd)}</td><td class="n">${pct(r.vnd/(totVnd||1))}</td><td class="n"><b>${f1(r.age)}</b></td><td class="n">${fmt(r.mx)}</td><td class="n"><span class="${r.bk[3]>0?'down':'flat'}">${pct(r.bk[3]/(r.vnd||1))}</span></td></tr>`).join('')}
@@ -898,11 +1016,18 @@ const PAGES={
    const sc=scopeData();
    const rows=SPDV.filter(s=>(sc.nhap[s]||0)>0||(sc.die[s]||0)>0).map(s=>[s,sc.nhap[s]||0,sc.die[s]||0,(sc.die[s]||0)/((sc.nhap[s])||1)]);
    const worst=rows.filter(r=>r[2]>0).sort((a,b)=>b[3]-a[3])[0];
+   const okSp=rows.filter(r=>r[1]>1e6).sort((a,b)=>a[3]-b[3])[0];
+   const p11Ins=[
+    `Tỷ lệ lỗi toàn phòng <b>${pct(sc.totalDie/(sc.totalNhap||1))}</b> trong ${scopeLabel()}.`,
+    worst?`Lỗi cao nhất: <b>${worst[0]}</b> — ${pct(worst[3])} (thiệt hại ${fmt(worst[2])} trên nhập ${fmt(worst[1])}).`:null,
+    okSp&&worst&&okSp[0]!==worst[0]?`Thấp nhất trong các SPDV có nhập đáng kể: <b>${okSp[0]}</b> — ${pct(okSp[3])}.`:null,
+   ];
    host.innerHTML=`<div class="kpis">
      ${kpi("Tỷ lệ lỗi toàn phòng",pct(sc.totalDie/(sc.totalNhap||1)),scopeLabel())}
      ${kpi("Tổng thiệt hại",fmt(sc.totalDie),"die / lỗi / KBH")}
      ${kpi("SPDV lỗi cao nhất",worst?shortSP(worst[0]):'—',worst?pct(worst[3])+" thiệt hại/nhập":'')}
      ${kpi("Lỗi Robux",pct((sc.die["Robux"]||0)/((sc.nhap["Robux"])||1)),"die/nhập")}</div>
+    ${insightCard(p11Ins)}
     <div class="grid2">${cc("% lỗi theo SPDV","p11a")}${cc("% lỗi toàn phòng theo tháng","p11b")}</div>
     <div class="card"><h3>Bảng tỷ lệ lỗi nhập — ${scopeLabel()}</h3><div class="scroll"><table class="tbl"><thead><tr><th>SPDV</th><th class="n">CO Nhập</th><th class="n">Thiệt hại</th><th class="n">% lỗi</th></tr></thead><tbody>
      ${rows.map(r=>`<tr><td>${r[0]}</td><td class="n">${fmtn(r[1])}</td><td class="n">${fmtn(r[2])}</td><td class="n">${pct(r[3])}</td></tr>`).join('')}</tbody></table></div></div>
