@@ -178,6 +178,20 @@ select:focus{outline:none;border-color:var(--cyan);box-shadow:0 0 10px rgba(34,2
  .strip>span[style*="margin-left:auto"]{margin-left:0!important;width:100%}
  .pgpick>summary{min-width:150px}
 }
+/* hộp Hỏi đáp dữ liệu */
+#askwrap{position:fixed;inset:0;z-index:600;display:none}
+#askback{position:absolute;inset:0;background:rgba(3,8,18,.62);backdrop-filter:blur(3px)}
+#askbox{position:relative;margin:5vh auto 0;width:min(780px,94vw);max-height:88vh;overflow:auto;background:#fff;color:#14243d;border-radius:16px;padding:16px 18px;box-shadow:0 24px 70px rgba(0,0,0,.5)}
+.askhead{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;color:#0b3a8f;font-size:15px}
+.askrow{display:flex;gap:8px}
+.askrow input{flex:1;padding:10px 13px;border:1px solid #c9d6ea;border-radius:9px;font-size:13.5px;font-family:inherit;color:#14243d}
+.askrow input:focus{outline:none;border-color:#2e86e6;box-shadow:0 0 0 3px rgba(46,134,230,.15)}
+.askchips{display:flex;gap:6px;flex-wrap:wrap;margin-top:9px}
+#askbox .pbtn{background:#eef4ff;color:#0b3a8f;border:1px solid #c9d6ea}
+#askbox .pbtn:hover{background:#dbe9ff;transform:none}
+.askans{background:#f6f9ff;border-left:3px solid #1e5fd0;border-radius:10px;padding:10px 13px;margin-top:10px;font-size:13px;line-height:1.65}
+.askq{font-weight:700;color:#0b3a8f;margin-bottom:5px}
+#askbox .tbl td,#askbox .tbl th{padding:6px 8px;font-size:12px}
 /* card diễn giải & phân tích tự động */
 .insight{background:linear-gradient(160deg,#f6f9ff,#eef4ff);border-left:3px solid #1e5fd0}
 .insight h3{text-align:left;color:#0b3a8f}
@@ -197,6 +211,15 @@ select:focus{outline:none;border-color:var(--cyan);box-shadow:0 0 10px rgba(34,2
     <input id="lgPass" type="password" placeholder="Mật khẩu" autocomplete="current-password"/>
     <button class="loginbtn" onclick="doLogin()">Đăng nhập</button>
     <div id="lgErr" class="loginerr"></div>
+  </div>
+</div>
+<div id="askwrap">
+  <div id="askback" onclick="askClose()"></div>
+  <div id="askbox">
+    <div class="askhead"><b>💬 Hỏi đáp dữ liệu</b><button class="pbtn" onclick="askClose()">✕ Đóng</button></div>
+    <div class="askrow"><input id="askinp" placeholder="Ví dụ: nhập Robux tháng 6 · so sánh T5 vs T6 · top 5 NCC Gift Card…" onkeydown="if(event.key==='Enter')askGo()"><button class="btn" onclick="askGo()">Hỏi</button></div>
+    <div id="askchips" class="askchips"></div>
+    <div id="asklog"></div>
   </div>
 </div>
 <button class="mbtn" onclick="toggleMenu()" aria-label="Menu">☰</button>
@@ -534,6 +557,7 @@ function renderFilters(){const f=document.getElementById('filters');if(curr==="S
   <div class="fg"><label>Từ ngày</label><input type="date" id="fFrom" value="${iso(FROM)}" min="2026-01-01" max="2026-12-31" onchange="setRange(this.value,null)"></div>
   <div class="fg"><label>Đến ngày</label><input type="date" id="fTo" value="${iso(TO)}" min="2026-01-01" max="2026-12-31" onchange="setRange(null,this.value)"></div>
   <div class="fg"><label>Nhanh</label><div class="presets"><button class="pbtn" onclick="preset(7)">7N</button><button class="pbtn" onclick="preset(30)">30N</button><button class="pbtn" onclick="preset('m')">Tháng này</button><button class="pbtn" onclick="preset('y')">Cả kỳ</button></div></div>
+  <button class="btn" style="background:linear-gradient(90deg,#7c3aed,#2e86e6)" onclick="askOpen()">💬 Hỏi đáp</button>
   <button class="btn" onclick="applyFilter()">↻ Làm mới</button>`;}
 function onM(v){window._m=+v;window._w=0;window._d=0;renderFilters();applyFilter();}
 function onW(v){window._w=+v;window._d=0;renderFilters();applyFilter();}
@@ -1483,6 +1507,238 @@ function renderSRC(){const host=document.getElementById('content');
      tr.children[5].textContent=use.head;tr.children[5].style.color=use.ok?'#0f7a4d':'#9a3b2a';
      done++;if(use.ok)okCnt++;finish();})();});});
 }
+/* ===== HỎI ĐÁP DỮ LIỆU — engine tra cứu & phân tích, chạy ngay trên trình duyệt ===== */
+const deacc=x=>{try{x=(''+x).normalize('NFD');}catch(e){x=''+x;}return x.replace(/[̀-ͯ]/g,'').replace(/đ/g,'d').replace(/Đ/g,'d').toLowerCase();};
+const ASK_SP=[["RBX Daily",["rbx daily","rbxdaily"]],["RBX HQS",["rbx hqs","rbxhqs","hqs"]],["Gift Card",["gift card","giftcard","gift","gc"]],["Nick Random Roblox",["nick random roblox","nick random","nick"]],["Razer Gold",["razer gold","razergold","razer"]],["Supercell",["supercell","super cell"]],["Topup",["topup","top up"]],["Token",["token"]],["Robux",["robux"]]];
+function askSp(qd){for(const[sp,al]of ASK_SP)for(const a of al)if(qd.indexOf(a)>-1)return sp;return null;}
+function askSps(qd){const f=[];for(const[sp,al]of ASK_SP)for(const a of al){if(qd.indexOf(a)>-1){f.push(sp);break;}}return f;}
+function askMonths(qd){const out=[];const re=/(?:thang\s*|\bt)(\d{1,2})(?!\d)|\b(\d{1,2})\s*\/\s*(?:20)?26\b/g;let m;
+ while((m=re.exec(qd))!==null){const v=+((m[1]!==undefined?m[1]:m[2]));if(v>=1&&v<=12){const mi=v-1;if(out.indexOf(mi)<0)out.push(mi);}}
+ return out;}
+const ASK_MET={nhap:{S:()=>NHAP,label:'CO Nhập',bad:false},xuat:{S:()=>XUAT,label:'CO Xuất',bad:false},die:{S:()=>DIE,label:'Thiệt hại',bad:true}};
+function askMetric(qn,qd){
+ if(/gia von|\bgv\b/.test(qd))return 'gv';
+ if(/tồn/.test(qn))return 'ton';
+ if(/dồn/.test(qn))return 'don';
+ if(/gross|that thoat/.test(qd))return 'gl';
+ if(/re nhat|chenh gia|ma tran gia|gia theo ncc|\bsku\b/.test(qd))return 'price';
+ if(/lead ?time|\bsla\b|hoan tat|nang suat|xu ly don|don\/ngay/.test(qd))return 'sla';
+ if(/\bdie\b|thiet hai|\bloi\b/.test(qd)||/thiệt hại|lỗi/.test(qn))return 'die';
+ if(/xuat|ban ra/.test(qd))return 'xuat';
+ if(/nhap|mua vao/.test(qd))return 'nhap';
+ return null;}
+function askVal(met,sp,mi){const S=ASK_MET[met].S();if(sp)return (S[sp]&&S[sp][mi])||0;return SPDV.reduce((a,s)=>a+((S[s]&&S[s][mi])||0),0);}
+function askCompareMonths(met,sp,a,b){const M=ASK_MET[met];
+ const va=askVal(met,sp,a),vb=askVal(met,sp,b);
+ let h=`<b>${M.label}${sp?' '+sp:''}: T${pad2(a+1)} vs T${pad2(b+1)}</b><br>T${pad2(a+1)} = <b>${va?fmt(va):'0'}</b> · T${pad2(b+1)} = <b>${vb?fmt(vb):'0'}</b> → T${pad2(b+1)} ${insUD(va?vb/va-1:(vb?1:0),M.bad)} so với T${pad2(a+1)} (chênh ${fmt(Math.abs(vb-va))}).`;
+ if(!sp){const list=SPDV.filter(s=>askVal(met,s,a)||askVal(met,s,b));
+  if(list.length>1){h+=`<div class="scroll" style="max-height:260px;margin-top:8px"><table class="tbl"><thead><tr><th>SPDV</th><th class="n">T${pad2(a+1)}</th><th class="n">T${pad2(b+1)}</th><th class="n">Δ</th><th class="n">%</th></tr></thead><tbody>`;
+   list.forEach(sx=>{const x=askVal(met,sx,a),y=askVal(met,sx,b);const d=y-x;h+=`<tr><td>${sx}</td><td class="n">${fmtn(x)}</td><td class="n">${fmtn(y)}</td><td class="n">${d?(d>0?'+':'−')+fmt(Math.abs(d)):'0'}</td><td class="n"><span class="${x?cls(M.bad?-d:d):'flat'}">${x?((y/x-1)*100).toFixed(1)+'%':'—'}</span></td></tr>`;});
+   h+=`</tbody></table></div>`;
+   let up=null,dn=null;list.forEach(sx=>{const x=askVal(met,sx,a),y=askVal(met,sx,b);if(x>1e6){const r=y/x-1;if(!up||r>up[1])up=[sx,r];if(!dn||r<dn[1])dn=[sx,r];}});
+   if(up||dn)h+=`<div style="margin-top:6px">${up?`Tăng mạnh nhất: <b>${up[0]}</b> ${insUD(up[1],M.bad)}`:''}${up&&dn?' · ':''}${dn?`Giảm sâu nhất: <b>${dn[0]}</b> ${insUD(dn[1],M.bad)}`:''}.</div>`;}}
+ return h;}
+function askCompareSp(met,A,B,tmn){const M=ASK_MET[met];
+ const sum=sx=>tmn.reduce((a,mi)=>a+askVal(met,sx,mi),0);
+ const va=sum(A),vb=sum(B);const win=va>=vb?A:B;
+ let h=`<b>So sánh ${M.label}: ${A} vs ${B}</b> (${scopeLabel()})<br>${A} = <b>${fmt(va)}</b> · ${B} = <b>${fmt(vb)}</b> → <b>${win}</b> lớn hơn ${fmt(Math.abs(va-vb))}${va&&vb?` (gấp ${(Math.max(va,vb)/Math.min(va,vb)).toFixed(2)} lần)`:''}.`;
+ h+=`<div class="scroll" style="max-height:240px;margin-top:8px"><table class="tbl"><thead><tr><th>Tháng</th><th class="n">${A}</th><th class="n">${B}</th></tr></thead><tbody>${tmn.map(mi=>`<tr><td>T${pad2(mi+1)}</td><td class="n">${fmtn(askVal(met,A,mi))}</td><td class="n">${fmtn(askVal(met,B,mi))}</td></tr>`).join('')}</tbody></table></div>`;
+ return h;}
+function askPeak(met,sp,tmn){const M=ASK_MET[met];const vals=tmn.map(mi=>askVal(met,sp,mi));const st=insSeries(vals);
+ return `${M.label}${sp?' <b>'+sp+'</b>':''} theo tháng (${scopeLabel()}): cao nhất <b>${insT(tmn,st.hi)}</b> (${fmt(vals[st.hi])}), thấp nhất <b>${insT(tmn,st.lo)}</b> (${vals[st.lo]?fmt(vals[st.lo]):'0'})${st.k>=2?`; đang ${st.dir>0?'tăng':'giảm'} ${st.k} tháng liên tiếp`:''}.${insNote(tmn)?'<br>'+insNote(tmn):''}`;}
+function askValue(met,sp,mos,tmn){const M=ASK_MET[met];
+ if(mos.length===1){const mi=mos[0];const v=askVal(met,sp,mi);
+  let h=`${M.label}${sp?' <b>'+sp+'</b>':''} T${pad2(mi+1)} = <b>${v?fmt(v):'0'}</b>`;
+  if(mi>0){const pv=askVal(met,sp,mi-1);h+=` — ${insUD(pv?v/pv-1:(v?1:0),M.bad)} so T${pad2(mi)} (${pv?fmt(pv):'0'})`;}
+  if(sp){const tot=askVal(met,null,mi);if(tot)h+=`; chiếm ${pct(v/tot)} toàn phòng T${pad2(mi+1)}`;}
+  else{const shr=SPDV.map(sx=>[sx,askVal(met,sx,mi)]).filter(x=>x[1]>0).sort((a,b)=>b[1]-a[1]).slice(0,3);
+   if(shr.length&&v)h+=`; top: ${shr.map(x=>shortSP(x[0])+' '+pct(x[1]/v)).join(' · ')}`;}
+  const note=(TD.y===2026&&mi===TD.mo&&TD.d<new Date(TD.y,TD.mo+1,0).getDate())?`<br><i>T${pad2(mi+1)} chưa trọn tháng (mới đến ${pad2(TD.d)}/${pad2(TD.mo+1)}).</i>`:'';
+  return h+'.'+note;}
+ const v=tmn.reduce((a,mi)=>a+askVal(met,sp,mi),0);
+ const vals=tmn.map(mi=>askVal(met,sp,mi));const st=insSeries(vals);
+ let h=`${M.label}${sp?' <b>'+sp+'</b>':''} trong ${scopeLabel()} = <b>${v?fmt(v):'0'}</b>`;
+ if(sp){const tot=tmn.reduce((a,mi)=>a+askVal(met,null,mi),0);if(tot)h+=` (${pct(v/tot)} toàn phòng)`;}
+ if(tmn.length>1&&st&&v)h+=`; cao nhất ${insT(tmn,st.hi)} (${fmt(vals[st.hi])}), thấp nhất ${insT(tmn,st.lo)} (${vals[st.lo]?fmt(vals[st.lo]):'0'})${st.mom!=null?`; tháng gần nhất ${insUD(st.mom,M.bad)}`:''}`;
+ return h+'.'+(insNote(tmn)?'<br>'+insNote(tmn):'');}
+function askTopGroup(kind,sp,n,tmn){const ALL=kind==='nv'?NV_ALL:NCC_ALL;const unit=kind==='nv'?'nhân viên':'NCC';
+ if(!Object.keys(ALL).length)return `Chưa tải được dữ liệu ${unit} — mở trang ${kind==='nv'?'PVH3':'PVH1'} một lần để tải, hoặc kiểm tra Nguồn & Cấu hình.`;
+ const acc={};const use=sp?(ALL[sp]?[sp]:[]):Object.keys(ALL);
+ use.forEach(sx=>{(ALL[sx]||[]).forEach(x=>{const t=tmn.reduce((a,mi)=>a+(x[1][mi]||0),0);if(t>0)acc[x[0]]=(acc[x[0]]||0)+t;});});
+ const rows=Object.keys(acc).map(k=>[k,acc[k]]).sort((a,b)=>b[1]-a[1]);
+ if(!rows.length)return `Không có ${unit} nào phát sinh${sp?' cho '+sp:''} trong ${scopeLabel()}.`;
+ const tot=rows.reduce((a,x)=>a+x[1],0);const top=rows.slice(0,n);
+ let h=`<b>Top ${top.length} ${unit}${sp?' · '+sp:''}</b> theo CO Nhập (${scopeLabel()}):`;
+ h+=`<div class="scroll" style="max-height:260px;margin-top:8px"><table class="tbl"><thead><tr><th>#</th><th>${unit}</th><th class="n">CO Nhập</th><th class="n">Tỷ trọng</th></tr></thead><tbody>${top.map((x,i)=>`<tr><td>${i+1}</td><td>${x[0]}</td><td class="n">${fmt(x[1])}</td><td class="n">${pct(x[1]/tot)}</td></tr>`).join('')}</tbody></table></div>`;
+ h+=`<div style="margin-top:6px">Top ${top.length} chiếm <b>${pct(top.reduce((a,x)=>a+x[1],0)/tot)}</b> trong tổng ${fmt(tot)} của ${rows.length} ${unit}.</div>`;
+ return h;}
+function askFindName(qd){const seen={};const hits=[];
+ const scan=(ALL,kind)=>{Object.keys(ALL||{}).forEach(sx=>{(ALL[sx]||[]).forEach(x=>{const nm=x[0];const dn=deacc(nm);if(dn.length<3)return;
+  if(seen[kind+'|'+dn])return;
+  const re=new RegExp('(^|[^a-z0-9])'+dn.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'($|[^a-z0-9])');
+  if(re.test(qd)){seen[kind+'|'+dn]=1;hits.push({name:nm,kind,dn});}});});};
+ scan(NCC_ALL,'ncc');scan(NV_ALL,'nv');
+ const ok=hits.filter(hh=>!ASK_SP.some(([sp,al])=>al.indexOf(hh.dn)>-1));
+ ok.sort((a,b)=>b.dn.length-a.dn.length);
+ return ok[0]||null;}
+function askGroupName(hit,tmn){const ALL=hit.kind==='nv'?NV_ALL:NCC_ALL;const unit=hit.kind==='nv'?'Nhân viên':'NCC';
+ const rows=[];let tot=0;const ser=Array(tmn.length).fill(0);
+ Object.keys(ALL).forEach(sx=>{(ALL[sx]||[]).forEach(x=>{if((''+x[0]).toLowerCase()!==(''+hit.name).toLowerCase())return;
+  const t=tmn.reduce((a,mi)=>a+(x[1][mi]||0),0);if(t<=0)return;rows.push([sx,t,x[1]]);tot+=t;
+  tmn.forEach((mi,j)=>{ser[j]+=x[1][mi]||0;});});});
+ if(!rows.length)return `<b>${hit.name}</b> không phát sinh trong ${scopeLabel()}.`;
+ rows.sort((a,b)=>b[1]-a[1]);const st=insSeries(ser);
+ let h=`<b>${unit} ${hit.name}</b> — CO Nhập ${scopeLabel()} = <b>${fmt(tot)}</b> trên ${rows.length} SPDV.`;
+ h+=`<div class="scroll" style="max-height:240px;margin-top:8px"><table class="tbl"><thead><tr><th>SPDV</th>${tmn.map(mi=>`<th class="n">T${pad2(mi+1)}</th>`).join('')}<th class="n">Tổng</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${r[0]}</td>${tmn.map(mi=>`<td class="n">${fmtn(r[2][mi])}</td>`).join('')}<td class="n"><b>${fmt(r[1])}</b></td></tr>`).join('')}</tbody></table></div>`;
+ if(tmn.length>1&&st)h+=`<div style="margin-top:6px">Cao nhất ${insT(tmn,st.hi)} (${fmt(ser[st.hi])})${st.mom!=null?`; tháng gần nhất ${insUD(st.mom)}`:''}.</div>`;
+ return h;}
+async function askGV(qd,sp,mos){const out=[];
+ const want=sp==='Razer Gold'?['razer']:(sp==='Robux'?['robux']:['robux','razer']);
+ for(const key of want){const cfg=COSTCFG[key];const M=await costMonths(key);
+  if(!M){out.push(`<b>${cfg.sp}</b>: chưa đọc được nguồn giá vốn (gid ${cfg.gid}).`);continue;}
+  const fm=n=>n.toLocaleString('vi-VN',{minimumFractionDigits:cfg.dec,maximumFractionDigits:cfg.dec});
+  const ms=M.map((m,i)=>({mi:i,sl:m.sl,tien:m.tien,gv:m.sl>0?m.tien/m.sl:0})).filter(m=>m.tien>0);
+  if(!ms.length){out.push(`<b>${cfg.sp}</b>: chưa có dữ liệu mua.`);continue;}
+  const totT=ms.reduce((a,m)=>a+m.tien,0),totS=ms.reduce((a,m)=>a+m.sl,0),bq=totS?totT/totS:0;
+  const unit=cfg.cur+'/'+cfg.unit;
+  const m=mos.length?ms.find(x=>x.mi===mos[0]):ms[ms.length-1];
+  if(!m){out.push(`<b>${cfg.sp}</b>: T${pad2(mos[0]+1)} không có dữ liệu mua (các tháng có số: ${ms.map(x=>'T'+pad2(x.mi+1)).join(', ')}).`);continue;}
+  const j=ms.indexOf(m);const pv=j>0?ms[j-1]:null;
+  const hi=ms.reduce((a,x)=>x.gv>a.gv?x:a,ms[0]),lo=ms.reduce((a,x)=>x.gv<a.gv?x:a,ms[0]);
+  out.push(`<b>${cfg.sp}</b>: GV T${pad2(m.mi+1)} = <b>${fm(m.gv)} ${unit}</b>${pv?` — ${insUD(pv.gv?m.gv/pv.gv-1:0,true)} so T${pad2(pv.mi+1)} (${fm(pv.gv)})`:''}; BQ năm ${fm(bq)} (tháng này ${m.gv>=bq?'cao hơn':'thấp hơn'} ${insAbs(bq?m.gv/bq-1:0)}); đỉnh T${pad2(hi.mi+1)} ${fm(hi.gv)} · đáy T${pad2(lo.mi+1)} ${fm(lo.gv)}.`);}
+ return out.join('<br>');}
+async function askPrice(qn,qd){const R=await priceRecs('gc');
+ if(!R)return 'Chưa đọc được Data giftcard (kiểm tra Nguồn & Cấu hình).';
+ const fk=iso(FROM),tk=iso(TO);const inS=R.filter(r=>r.dk>=fk&&r.dk<=tk);
+ if(!inS.length)return `Không có lô nhập Gift Card trong ${scopeLabel()} — nới khoảng lọc hoặc bấm Cả kỳ.`;
+ const skus={},nccTot={};
+ inS.forEach(r=>{const sx=skus[r.sku]=skus[r.sku]||{};const c=sx[r.ncc]=sx[r.ncc]||{v:0,w:0};c.v+=r.gia*r.sl;c.w+=r.sl;nccTot[r.ncc]=(nccTot[r.ncc]||0)+r.gia*r.sl;});
+ const f2=n=>n.toLocaleString('vi-VN',{minimumFractionDigits:2,maximumFractionDigits:2});
+ const rowsD=Object.keys(skus).map(sku=>{const m=skus[sku];let mn=Infinity,mx=-Infinity,best='';const cells={};
+  Object.keys(m).forEach(n=>{const pr=m[n].v/m[n].w;cells[n]=pr;if(pr<mn){mn=pr;best=n;}if(pr>mx)mx=pr;});
+  const cnt=Object.keys(cells).length;return {sku,cells,mn,mx,best,cnt,spread:cnt>1?(mx-mn)/mn:0};});
+ const tokens=qd.split(/[^a-z0-9$]+/).filter(t=>t.length>=4&&!/nhat|chenh|card|gift|thang|trong|nhap|ngung/.test(t));
+ let skuHit=null;for(const r of rowsD){const dn=deacc(r.sku);if(tokens.some(t=>dn.indexOf(t)>-1)){skuHit=r;break;}}
+ if(skuHit){let h=`<b>${skuHit.sku}</b> (${scopeLabel()}): `;
+  const ord=Object.keys(skuHit.cells).sort((a,b)=>skuHit.cells[a]-skuHit.cells[b]);
+  h+=ord.map(n=>`${n} <b>$${f2(skuHit.cells[n])}</b>`).join(' · ');
+  if(skuHit.cnt>1)h+=`<br>→ Rẻ nhất: <b>${skuHit.best}</b>; chênh rẻ–đắt ${(skuHit.spread*100).toFixed(1)}%.`;
+  return h;}
+ if(/chenh/.test(qd)){const tops=rowsD.filter(r=>r.cnt>1).sort((a,b)=>b.spread-a.spread).slice(0,5);
+  if(!tops.length)return 'Chưa có SKU nào so sánh được ≥2 NCC trong kỳ.';
+  return `<b>Top ${tops.length} SKU chênh giá mạnh nhất</b> (${scopeLabel()}):<div class="scroll" style="max-height:240px;margin-top:8px"><table class="tbl"><thead><tr><th>SKU</th><th>Rẻ nhất tại</th><th class="n">Giá rẻ nhất</th><th class="n">Chênh %</th></tr></thead><tbody>${tops.map(r=>`<tr><td>${r.sku}</td><td>${r.best}</td><td class="n">$${f2(r.mn)}</td><td class="n">${(r.spread*100).toFixed(1)}%</td></tr>`).join('')}</tbody></table></div>`;}
+ const multi=rowsD.filter(r=>r.cnt>1);const bestCnt={};multi.forEach(r=>{bestCnt[r.best]=(bestCnt[r.best]||0)+1;});
+ const ord=Object.keys(bestCnt).sort((a,b)=>bestCnt[b]-bestCnt[a]);
+ let h=`Trong ${scopeLabel()}: ${Object.keys(skus).length} SKU · ${Object.keys(nccTot).length} NCC · ${multi.length} SKU so được ≥2 NCC${R._excl?` (đã loại ${fmt(R._excl)} dòng Ngưng hoạt động)`:''}.`;
+ if(ord.length)h+=`<br>NCC rẻ nhất ở nhiều SKU nhất: ${ord.slice(0,3).map(n=>`<b>${n}</b> (${bestCnt[n]} SKU)`).join(' · ')}.`;
+ return h;}
+async function askTon(qn,qd){const T=await tonKhoData();
+ if(!T)return 'Chưa đọc được file Tồn kho (mở PVH6 kiểm tra hoặc xem Nguồn & Cấu hình).';
+ const {recs,fx}=T;const f1=n=>n.toLocaleString('vi-VN',{minimumFractionDigits:1,maximumFractionDigits:1});
+ const cats={};recs.forEach(r=>{const c=cats[r.cat]=cats[r.cat]||{n:0,usd:0,wd:0,o90:0};c.n++;c.usd+=r.usd;c.wd+=r.usd*r.days;if(r.days>90)c.o90+=r.usd;});
+ const rows=Object.keys(cats).map(c=>({cat:c,n:cats[c].n,usd:cats[c].usd,wd:cats[c].wd,o90:cats[c].o90,vnd:cats[c].usd*fx})).sort((a,b)=>b.vnd-a.vnd);
+ const totV=rows.reduce((a,r)=>a+r.vnd,0),o90=rows.reduce((a,r)=>a+r.o90*fx,0);
+ const totU=rows.reduce((a,r)=>a+r.usd,0);const totAge=totU?rows.reduce((a,r)=>a+r.wd,0)/totU:0;
+ const tokens=qd.split(/[^a-z0-9$]+/).filter(t=>t.length>=4&&!/ngay|khoa|hang|danh/.test(t));
+ const hit=rows.find(r=>tokens.some(t=>deacc(r.cat).indexOf(t)>-1));
+ if(hit)return `<b>${hit.cat}</b>: tồn ${fmt(hit.n)} code = <b>${fmt(hit.vnd)} đ</b> (${pct(hit.vnd/(totV||1))} giá trị kho); tuổi BQ ${f1(hit.usd?hit.wd/hit.usd:0)} ngày; giá trị >90 ngày ${fmt(hit.o90*fx)} đ (${pct(hit.o90*fx/(hit.vnd||1))}).`;
+ if(/\b90\b/.test(qd)){const tops=rows.filter(r=>r.o90>0).sort((a,b)=>b.o90-a.o90).slice(0,5);
+  return `Tồn quá 90 ngày: <b>${fmt(o90)} đ</b> (${pct(o90/(totV||1))} giá trị kho).${tops.length?`<div class="scroll" style="max-height:220px;margin-top:8px"><table class="tbl"><thead><tr><th>Danh mục</th><th class="n">Giá trị >90n (đ)</th></tr></thead><tbody>${tops.map(r=>`<tr><td>${r.cat}</td><td class="n">${fmt(r.o90*fx)}</td></tr>`).join('')}</tbody></table></div>`:' Không có danh mục nào quá 90 ngày.'}`;}
+ return `Tồn kho hiện tại: <b>${fmt(totV)} đ</b> · ${fmt(recs.length)} code · ${rows.length} danh mục; tuổi tồn BQ ${f1(totAge)} ngày; >90 ngày chiếm ${pct(o90/(totV||1))}. Lớn nhất: <b>${rows[0].cat}</b> (${pct(rows[0].vnd/(totV||1))}).`;}
+async function askSLA(qd){const[Rn,Ry]=await Promise.all([slaRows('ngay'),slaRows('nam')]);
+ const T=parseSlaThang(Rn),Y=parseSlaNam(Ry);
+ const f1=n=>n.toLocaleString('vi-VN',{minimumFractionDigits:1,maximumFractionDigits:1});
+ let h='';
+ if(T){const fk=iso(FROM),tk=iso(TO);const days=T.dateCols.filter(dc=>dc.dk>=fk&&dc.dk<=tk);
+  if(days.length){const sum=row=>row?days.reduce((a,dc)=>a+(row.daily[dc.dk]||0),0):0;
+   const meanPos=row=>{if(!row)return 0;let sm=0,n=0;days.forEach(dc=>{const v=row.daily[dc.dk];if(v!=null&&v>0){sm+=v;n++;}});return n?sm/n:0;};
+   const tong=b=>b&&(b.rows.find(r=>/^tổng/i.test(r.name))||b.rows[0]);
+   const ps0=T.ps&&T.ps.rows[0],htT=tong(T.ht),ltT=tong(T.lt),pcT=tong(T.pc);
+   const htS=sum(htT),ltM=meanPos(ltT),pcM=meanPos(pcT);
+   h+=`Kỳ ${scopeLabel()} (${days.length} ngày): phát sinh ${fmt(sum(ps0))} đơn, hoàn tất <b>${fmt(htS)}</b> (${fmt(Math.round(htS/(days.length||1)))} đơn/ngày); lead time TB <b>${f1(ltM)} h</b> (<span class="${ltM<=4?'up':'down'}">${ltM<=4?'đạt':'vượt'} KPI ≤4h</span>); tỷ lệ đạt KPI lead time <b>${f1(pcM)}%</b>.`;
+   if(/top|nhan su|nhan vien|\bai\b/.test(qd)&&T.ht){const stf=T.ht.rows.filter(r=>r.name&&!/^tổng/i.test(r.name)).map(st=>[st.name,sum(st)]).filter(x=>x[1]>0).sort((a,b)=>b[1]-a[1]).slice(0,5);
+    if(stf.length)h+=`<div class="scroll" style="max-height:200px;margin-top:8px"><table class="tbl"><thead><tr><th>Nhân sự</th><th class="n">Hoàn tất (kỳ lọc)</th></tr></thead><tbody>${stf.map(x=>`<tr><td>${x[0]}</td><td class="n">${fmt(x[1])}</td></tr>`).join('')}</tbody></table></div>`;}}
+  else h+=`Tab "Theo tháng" không có ngày nào trong ${scopeLabel()} — chỉnh Từ–Đến trùm tháng đang báo cáo.`;}
+ if(Y){const hiM=Y.yByM.indexOf(Math.max(...Y.yByM));
+  const stf=[...Y.staff].sort((a,b)=>b.yr-a.yr).slice(0,3);
+  h+=`${h?'<br>':''}Cả năm: <b>${fmt(Y.yTot)}</b> đơn · ${Y.staff.length} nhân sự · đỉnh T${pad2(hiM+1)} (${fmt(Y.yByM[hiM])}); top: ${stf.map(st=>st.name+' ('+fmt(st.yr)+')').join(' · ')}.`;}
+ return h||'Chưa đọc được dữ liệu SLA (kiểm tra Nguồn & Cấu hình).';}
+function askHelp(){return `Chưa nhận diện được câu hỏi. Bạn có thể hỏi kiểu:
+ <ul style="margin:6px 0 0 18px;line-height:1.75">
+ <li>“Nhập Robux tháng 6” · “Xuất Gift Card T5” · “Die tháng 2” · “Robux dồn”</li>
+ <li>“So sánh T5 vs T6” · “So sánh Robux với Gift Card” · “Tỉ trọng nhập”</li>
+ <li>“Tháng nào nhập cao nhất?” · “SPDV nào die nhiều nhất?”</li>
+ <li>“Top 5 NCC Gift Card” · “SEAGM nhập bao nhiêu?” · “Top nhân viên Topup”</li>
+ <li>“Giá vốn Robux tháng 7” · “Giá vốn Razer Gold”</li>
+ <li>“NCC nào rẻ nhất?” · “SKU nào chênh giá nhất?” · “Giá Steam”</li>
+ <li>“Tồn quá 90 ngày” · “Gross loss” · “Lead time” · “Top nhân sự xử lý đơn”</li></ul>`;}
+async function askAnswer(q){
+ try{
+ const qn=(''+q).normalize('NFC').toLowerCase(),qd=deacc(q);
+ const sp=askSp(qd),sps=askSps(qd),mos=askMonths(qd);
+ /* không rõ chỉ số → chỉ mặc định "Nhập" khi câu có SPDV/tháng/ý so sánh; còn lại đưa gợi ý */
+ const met0=askMetric(qn,qd);
+ const met=met0||((sp||sps.length||mos.length||/so sanh|\bvs\b|cao nhat|thap nhat|lon nhat|nhieu nhat|ti trong|ty trong|co cau|spdv nao|loai nao|top/.test(qd))?'nhap':null);
+ const tmn=Object.keys(monthsInRange()).map(Number).sort((a,b)=>a-b);
+ if(met==='price')return await askPrice(qn,qd);
+ if(met==='ton')return await askTon(qn,qd);
+ if(met==='gv')return await askGV(qd,sp,mos);
+ if(met==='sla')return await askSLA(qd);
+ if(met==='gl'){const glM=tmn.map(mi=>{const n=monthNhap(mi)||0;const d=Object.keys(DIE).reduce((a,sx)=>a+((DIE[sx]&&DIE[sx][mi])||0),0);return n?d/n:0;});
+  const sc=scopeData();const st=insSeries(glM);
+  return `Gross Loss ${scopeLabel()} = <b>${pct(sc.totalDie/(sc.totalNhap||1))}</b> (thiệt hại ${fmt(sc.totalDie)} trên CO Nhập ${fmt(sc.totalNhap)})${tmn.length>1&&st?`; cao nhất ${insT(tmn,st.hi)} (${pct(glM[st.hi])}), thấp nhất ${insT(tmn,st.lo)} (${pct(glM[st.lo])})`:''}.`;}
+ if(met==='don'){const v=tmn.reduce((a,mi)=>a+(DON.Robux[mi]||0),0);const vals=tmn.map(mi=>DON.Robux[mi]||0);const st=insSeries(vals);const sc=scopeData();
+  return `Robux Dồn (thu hồi) ${scopeLabel()} = <b>${fmt(v)}</b>${tmn.length>1&&st?`; cao nhất ${insT(tmn,st.hi)} (${fmt(vals[st.hi])})${st.mom!=null?`; tháng gần nhất ${insUD(st.mom)}`:''}`:''}; bù lại ${pct(v/((v+sc.totalDie)||1))} tổng die+dồn.`;}
+ const topM=qd.match(/top\s*(\d+)?/);
+ const wantNcc=/\bncc\b|nha cung cap/.test(qd),wantNv=/nhan vien|\bnv\b|nhan su/.test(qd);
+ if((wantNcc||wantNv)&&(topM||/lon nhat|cao nhat|nhieu nhat|dan dau/.test(qd)))return askTopGroup(wantNv?'nv':'ncc',sp,topM&&topM[1]?Math.min(20,+topM[1]):5,tmn);
+ const hit=askFindName(qd);if(hit)return askGroupName(hit,tmn);
+ if(/so sanh|\bvs\b|so voi/.test(qd)){
+  if(mos.length>=2)return askCompareMonths(met,sp,mos[0],mos[1]);
+  if(sps.length>=2)return askCompareSp(met,sps[0],sps[1],tmn);}
+ if(/spdv nao|loai nao|san pham nao/.test(qd)&&ASK_MET[met]){
+  const rows=SPDV.map(sx=>[sx,tmn.reduce((a,mi)=>a+askVal(met,sx,mi),0)]).filter(x=>x[1]>0).sort((a,b)=>b[1]-a[1]);
+  if(!rows.length)return `Không có ${ASK_MET[met].label} phát sinh trong ${scopeLabel()}.`;
+  const tot=rows.reduce((a,x)=>a+x[1],0);
+  return `${ASK_MET[met].label} (${scopeLabel()}): cao nhất <b>${rows[0][0]}</b> (${fmt(rows[0][1])} = ${pct(rows[0][1]/tot)}); thấp nhất trong nhóm có phát sinh: <b>${rows[rows.length-1][0]}</b> (${fmt(rows[rows.length-1][1])}).`;}
+ if(/cao nhat|lon nhat|\bdinh\b|thap nhat|nho nhat|\bday\b/.test(qd)&&ASK_MET[met])return askPeak(met,sp,tmn);
+ if(/ti trong|ty trong|co cau/.test(qd)&&ASK_MET[met]){
+  const shr=SPDV.map(sx=>[sx,tmn.reduce((a,mi)=>a+askVal(met,sx,mi),0)]).filter(x=>x[1]>0).sort((a,b)=>b[1]-a[1]);
+  const tot=shr.reduce((a,x)=>a+x[1],0);
+  if(!tot)return `Không có ${ASK_MET[met].label} phát sinh trong ${scopeLabel()}.`;
+  return `Cơ cấu ${ASK_MET[met].label} (${scopeLabel()}): ${shr.map(x=>`${shortSP(x[0])} <b>${pct(x[1]/tot)}</b>`).join(' · ')}.`;}
+ if(met&&ASK_MET[met]){
+  if(mos.length>=2)return askCompareMonths(met,sp,mos[0],mos[1]);
+  return askValue(met,sp,mos,tmn);}
+ return askHelp();
+ }catch(e){return 'Không xử lý được câu hỏi ('+(e&&e.message?e.message:e)+') — thử hỏi theo mẫu gợi ý.';}}
+/* ---------- UI Hỏi đáp ---------- */
+const ASK_HINTS={
+ TQ:["Tháng nào nhập cao nhất?","So sánh T5 vs T6","Tỉ trọng nhập","SPDV nào die nhiều nhất?"],
+ PVH1:["Top 5 NCC Gift Card","SEAGM nhập bao nhiêu?","Top 3 NCC Robux"],
+ PVH2:["Die tháng nào cao nhất?","Robux dồn","So sánh die T5 vs T6"],
+ PVH3:["Top 5 nhân viên Gift Card","Top nhân viên Topup"],
+ PVH4:["Giá vốn Robux tháng 7","Giá vốn Razer Gold"],
+ PVH5:["NCC nào rẻ nhất?","SKU nào chênh giá nhất?"],
+ PVH6:["Tồn quá 90 ngày","Tồn kho hiện tại"],
+ PVH8:["Gross loss","Die tháng nào cao nhất?"],
+ PVH10:["Lead time trung bình","Top nhân sự xử lý đơn"],
+ PVH11:["SPDV nào lỗi cao nhất?","Gross loss"],
+ PVH12:["Die tháng nào cao nhất?","Robux dồn"]};
+function askOpen(){const w=document.getElementById('askwrap');if(!w)return;w.style.display='block';
+ const hints=ASK_HINTS[curr]||ASK_HINTS.TQ;
+ document.getElementById('askchips').innerHTML='<span class="small" style="align-self:center">Gợi ý:</span>'+hints.map(hh=>`<button class="pbtn" onclick="askAsk(this.textContent)">${hh}</button>`).join('');
+ setTimeout(()=>{const i=document.getElementById('askinp');if(i)i.focus();},60);}
+function askClose(){const w=document.getElementById('askwrap');if(w)w.style.display='none';}
+function askAsk(q){const i=document.getElementById('askinp');i.value=q;askGo();}
+let ASKN=0;
+async function askGo(){const i=document.getElementById('askinp');const q=(i.value||'').trim();if(!q)return;
+ const log=document.getElementById('asklog');const id='ask'+(++ASKN);
+ log.insertAdjacentHTML('afterbegin',`<div class="askans" id="${id}"><div class="askq">❓ ${q.replace(/</g,'&lt;')}</div><div class="askbody"><span class="spin" style="width:15px;height:15px;border-width:2px;display:inline-block;vertical-align:-3px"></span> Đang tra cứu dữ liệu…</div></div>`);
+ i.value='';i.focus();
+ let html;try{html=await askAnswer(q);}catch(e){html='Lỗi: '+(e&&e.message?e.message:e);}
+ const el=document.querySelector('#'+id+' .askbody');if(el)el.innerHTML=html;}
+document.addEventListener('keydown',e=>{if(e.key==='Escape')askClose();});
 function toggleMenu(v){const b=document.body;if(v===false)b.classList.remove('menuopen');else if(v===true)b.classList.add('menuopen');else b.classList.toggle('menuopen');}
 function go(id){if(!canSee(id)){id=firstPage();} /* chặn vào trang ngoài quyền */
  toggleMenu(false); /* mobile: chọn trang xong tự đóng menu */
