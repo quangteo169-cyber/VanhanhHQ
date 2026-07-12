@@ -587,7 +587,7 @@ function renderGroupReport(host,cfg){
    const nt=insNote(tmn);if(nt)gIns.push(nt);})();
  let h=`<div class="small" style="margin-bottom:10px">Phạm vi ${scopeLabel()} · CO Nhập theo ${cfg.unit} (cộng trọn tháng chạm khoảng: ${tmn.map(m=>'T'+(m+1)).join('+')}) · ${sps.length} SPDV · bấm <b>Cả kỳ</b> để khớp cột "2026"</div>`;
  h+=`<div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr))">${sps.map(sp=>kpi('Tổng CO Nhập · '+sp,fmt(agg[sp].disp),agg[sp].list.length+' '+cfg.unit+' · top: '+(agg[sp].list[0]?agg[sp].list[0][0]:'—')+(agg[sp].sheetT!=null?' · theo hàng tổng sheet':''))).join('')}</div>`;
- h+=insightCard(gIns);h+='<div class="grid2">';
+ h+='<div class="grid2">';
  sps.forEach((sp,idx)=>{
    const list=agg[sp].list,tot=agg[sp].tot,sheetT=agg[sp].sheetT;
    const diff=sheetT!=null?tot-sheetT:null;
@@ -606,7 +606,7 @@ function renderGroupReport(host,cfg){
      <tr style="font-weight:bold;background:#eef4ff"><td>Cộng ${list.length} ${cfg.unit}</td>${tmn.map(mi=>`<td class="n">${fmtn(list.reduce((a,x)=>a+(x[2][mi]||0),0))}</td>`).join('')}<td class="n">${fmtn(tot)}</td><td class="n">100%</td></tr>
      ${sheetT!=null?`<tr style="font-weight:bold;color:#0b3a8f;background:#eef4ff"><td>Hàng tổng trên sheet</td>${tmn.map(mi=>`<td class="n">${fmtn(tots[sp][mi])}</td>`).join('')}<td class="n">${fmtn(sheetT)}</td><td class="n">—</td></tr>`:''}
      </tbody></table></div></div>`;});
- h+='</div>';host.innerHTML=h;
+ h+='</div>';h+=insightCard(gIns);host.innerHTML=h;
  sps.forEach((sp,idx)=>{const list=agg[sp].list.slice(0,10);mk(cfg.pfx+"_"+idx,{type:'bar',data:{labels:list.map(x=>x[0]),datasets:[{data:list.map(x=>x[1]),backgroundColor:list.map((_,i)=>i===0?'#0b3a8f':(i<4?'#1e5fd0':'#4aa8f0'))}]},options:hbarOpt()});});
 }
 
@@ -663,9 +663,9 @@ const PAGES={
      ${kpi("Robux Dồn (thu hồi)",fmt(sc.don),"tái sử dụng")}
      ${kpi("Thiệt hại (die/lỗi)",fmt(sc.totalDie),"Gross Loss "+pct(sc.totalDie/(sc.totalNhap||1)))}
      ${kpi("Tổng CO Tồn",sc.ton?fmt(sc.ton):"—",sc.ton?"cộng các tháng trong phạm vi":"sheet chưa có số / chưa LIVE")}</div>
-    ${insightCard(tqIns)}
     <div class="grid2" style="grid-template-columns:1fr 1fr">${cc("Tổng CO Nhập theo SPDV — theo tháng","tq1")}${cc("Tổng CO Xuất theo SPDV — theo tháng","tq2")}</div>
-    <div class="grid2" style="grid-template-columns:1fr 1.4fr">${cc("Tỉ trọng CO Nhập theo SPDV — "+scopeLabel(),"tq3")}${cc("Thiệt hại theo SPDV — theo tháng","tq4")}</div>`;
+    <div class="grid2" style="grid-template-columns:1fr 1.4fr">${cc("Tỉ trọng CO Nhập theo SPDV — "+scopeLabel(),"tq3")}${cc("Thiệt hại theo SPDV — theo tháng","tq4")}</div>
+    ${insightCard(tqIns)}`;
    mk("tq1",stackCfg(lbl,dss(NHAP)));
    mk("tq2",stackCfg(lbl,dss(XUAT)));
    mk("tq3",donut(ST,ST.map(s=>sc.nhap[s]),ST.map(s=>SPCOL[s])));
@@ -689,10 +689,10 @@ const PAGES={
      ${kpi("Die Robux",fmt(sc.die["Robux"]),"lớn nhất")}
      ${kpi("Robux Dồn (thu hồi)",fmt(sc.don),"tái sử dụng")}
      ${kpi("Die / (Die+Dồn)",pct(dieT/((dieT+sc.don)||1)),"tỷ lệ mất thực")}</div>
-    ${insightCard(p2Ins)}
     <div class="grid3">${cc("Die theo SPDV","p1a")}${cc("Die theo "+lvl(),"p1b")}${cc("Dồn Robux theo "+lvl(),"p1c")}</div>
     <div class="card"><h3>Bảng Die & Dồn theo SPDV — ${scopeLabel()}</h3><div class="scroll"><table class="tbl"><thead><tr><th>SPDV</th><th class="n">Die</th><th class="n">Dồn</th></tr></thead><tbody>
-    ${SPDV.map(s=>`<tr><td>${s}</td><td class="n">${fmtn(sc.die[s])}</td><td class="n">${s==='Robux'?fmtn(sc.don):'-'}</td></tr>`).join('')}</tbody></table></div></div>`;
+    ${SPDV.map(s=>`<tr><td>${s}</td><td class="n">${fmtn(sc.die[s])}</td><td class="n">${s==='Robux'?fmtn(sc.don):'-'}</td></tr>`).join('')}</tbody></table></div></div>
+    ${insightCard(p2Ins)}`;
    mk("p1a",{type:'bar',data:{labels:SPDV.map(shortSP),datasets:[{data:SPDV.map(s=>sc.die[s]),backgroundColor:RED}]},options:hbarOpt()});
    const trDie=trend(m=>Object.keys(DIE).reduce((a,s)=>a+DIE[s][m],0),7);
    mk("p1b",{type:'line',data:{labels:trDie.labels,datasets:[{data:trDie.values,fill:true,backgroundColor:'rgba(244,63,94,.16)',borderColor:RED,borderWidth:2,tension:.35,pointRadius:3}]},options:barOpt(false)});
@@ -714,8 +714,8 @@ const PAGES={
    ];
    host.innerHTML=`<div class="note">★ Gross Loss = Thiệt hại / CO Nhập (theo phạm vi). Chưa gộp lệch đối soát &amp; chi phí hoàn.</div>
     <div class="kpis" style="margin-top:12px">${kpi("Gross Loss",pct(gl),scopeLabel())}${kpi("Tổng thiệt hại",fmt(sc.totalDie),"")}${kpi("CO Nhập",fmt(sc.totalNhap),"mẫu số")}${kpi("Die/Robux",fmt(sc.die["Robux"]),"lớn nhất")}</div>
-    ${insightCard(p8Ins)}
-    <div class="grid2">${cc("% Gross Loss theo "+(window._m<0?"tháng":"ngày"),"p8a")}${cc("Thiệt hại theo SPDV","p8b")}</div>`;
+    <div class="grid2">${cc("% Gross Loss theo "+(window._m<0?"tháng":"ngày"),"p8a")}${cc("Thiệt hại theo SPDV","p8b")}</div>
+    ${insightCard(p8Ins)}`;
    const trN=trend(monthNhap,7),trD=trend(m=>Object.keys(DIE).reduce((a,s)=>a+DIE[s][m],0),7);
    const glv=trN.values.map((v,i)=>v?+(trD.values[i]/v*100).toFixed(3):0);
    mk("p8a",{type:'line',data:{labels:trN.labels,datasets:[{data:glv,fill:true,backgroundColor:'rgba(244,63,94,.16)',borderColor:RED,borderWidth:2,tension:.35,pointRadius:trN.labels.length>12?2:3,pointBackgroundColor:trN.labels.map((_,i)=>i===trN.hl?'#0b3a8f':RED)}]},options:{plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.parsed.y+'%'}}},scales:{x:noX,y:{...yG,beginAtZero:true,ticks:{callback:v=>v+'%'}}}}});
@@ -748,7 +748,7 @@ const PAGES={
  PVH10:{title:"PVH10 · Năng suất xử lý đơn (SLA/Accuracy)",meta:"Nguồn: Báo cáo Năng xuất Xử lý đơn 2026 — tab Theo tháng (báo cáo ngày, lọc Từ–Đến) + tab Theo năm (nhân sự × tháng)",render(host){
    host.innerHTML=spinner("Đang đọc Báo cáo Năng xuất Xử lý đơn…");
    Promise.all([slaRows('ngay'),slaRows('nam')]).then(([Rn,Ry])=>{
-     let h='';const charts=[];
+     let h='',insEnd='';const charts=[];
      const T=parseSlaThang(Rn);
      const fk=iso(FROM),tk=iso(TO);
      if(!T){const sample=(Rn||[]).slice(0,10);
@@ -773,6 +773,7 @@ const PAGES={
           `Lead time trung bình <b>${f1(ltM)} h</b> — <span class="${ltM<=4?'up':'down'}">${ltM<=4?'đạt':'vượt'} KPI ${T.lt&&T.lt.kpi?T.lt.kpi:'≤4h'}</span>; tỷ lệ đạt KPI lead time <b>${f1(pcM)}%</b> <span class="${pcM>=85?'up':'down'}">(${pcM>=85?'trên':'dưới'} mốc ${T.pc&&T.pc.kpi?T.pc.kpi:'85%'})</span>.`,
           stf[0]?`Nhân sự xử lý nhiều nhất: <b>${stf[0][0]}</b> (${fmt(stf[0][1])} đơn = ${pct(stf[0][1]/(htS||1))})${stf.length>1?`; kế đến ${stf.slice(1,3).map(x=>x[0]+' ('+fmt(x[1])+')').join(', ')}`:''}.`:null,
          ];
+         insEnd=insightCard(p10Ins);
          h+=`<div class="small" style="margin-bottom:10px">Báo cáo ngày — ${days.length} ngày trong phạm vi ${scopeLabel()} · KPI lấy từ file: Hoàn tất ${T.ht?T.ht.kpi:''} · Lead time ${T.lt?T.lt.kpi:''} · Đạt KPI ${T.pc?T.pc.kpi:''}</div>
           <div class="kpis" style="grid-template-columns:repeat(5,1fr)">
            ${kpi("Đơn phát sinh",fmt(psS),"trong phạm vi")}
@@ -781,7 +782,6 @@ const PAGES={
            ${kpi("Tỷ lệ đạt KPI leadtime",f1(pcM)+"%",`<span class="${pcM>=85?'up':'down'}">${pcM>=85?'✓ đạt':'✗ dưới'} mức ${T.pc?T.pc.kpi:'>85%'}</span>`)}
            ${kpi("Đơn hủy",fmt(hyS),"trong phạm vi")}
           </div>
-          ${insightCard(p10Ins)}
           <div class="grid2" style="grid-template-columns:1.5fr 1fr">
            ${cc("Đơn phát sinh vs hoàn tất theo ngày","p10a")}
            <div class="card"><h3>Năng suất nhân sự — kỳ lọc</h3><div class="scroll" style="max-height:250px"><table class="tbl"><thead><tr><th>Nhân sự</th><th class="n">Hoàn tất</th><th class="n">Lead TB (h)</th><th class="n">% đạt KPI</th></tr></thead><tbody>
@@ -810,7 +810,7 @@ const PAGES={
        const topS=Y.staff.slice(0,16);
        charts.push({id:'p10s',labels:topS.map(st=>st.name),hbar:topS.map(st=>st.yr)});
      }
-     host.innerHTML=h;
+     host.innerHTML=h+insEnd;
      charts.forEach(ch=>{
        if(ch.s1)mk(ch.id,{type:'bar',data:{labels:ch.labels,datasets:[{label:'Phát sinh',data:ch.s1,backgroundColor:'#7cc4f7'},{label:'Hoàn tất',data:ch.s2,backgroundColor:'#1e5fd0'}]},options:barOpt(true)});
        else if(ch.bar)mk(ch.id,{type:'bar',data:{labels:ch.labels,datasets:[{data:ch.bar,backgroundColor:'#2e86e6',borderRadius:2}]},options:barOpt(false)});
@@ -883,7 +883,6 @@ const PAGES={
        ${kpi("Tổng mua cả kỳ",fmoney(totT)+" "+cfg.cur,fmt(totS)+" "+cfg.unit+" · "+fmt(ms.reduce((a,m)=>a+m.rows,0))+" dòng"+(cfg.cur==='USD'?" · ≈ "+fmt(totT*27000)+" đ (×27.000)":""))}
        ${kpi("Đã loại ("+cfg.don+")",fmt(totDon)+" "+cfg.unit,totDonRows+" dòng tiền = 0 — không tính vào GV")}
       </div>
-      ${insightCard(insC,cfg.sp)}
       <div class="grid2" style="grid-template-columns:1.5fr 1fr">
        ${cc(cfg.sp+" — giá vốn ĐV theo tháng ("+gvUnit+") · đường đứt: BQ năm · cột: %MoM","c_"+pfx)}
        <div class="card"><h3>${cfg.sp} — chi tiết theo tháng</h3><div class="scroll" style="max-height:240px"><table class="tbl"><thead><tr><th>Tháng</th><th class="n">Dòng mua</th><th class="n">SL nhập</th><th class="n">Thành tiền (${cfg.cur==='USD'?'USD':'VND'})</th><th class="n">GV ĐV</th><th class="n">Δ MoM</th><th class="n">%MoM</th><th class="n">So BQ</th><th class="n">SL loại</th></tr></thead><tbody>
@@ -892,7 +891,8 @@ const PAGES={
        <tr style="font-weight:bold;background:#eef4ff"><td>TỔNG</td><td class="n">${fmt(ms.reduce((a,m)=>a+m.rows,0))}</td><td class="n">${fmt(totS)}</td><td class="n">${fmoney(totT)}</td><td class="n">${fm(bq)}</td><td class="n">—</td><td class="n">—</td><td class="n">100%</td><td class="n">${fmt(totDon)}</td></tr>
        </tbody></table></div>
        ${cfg.cur==='USD'?`<div class="small" style="margin-top:6px">Rate = giá vốn (USD/RG), Thành tiền = SL × Rate — giữ nguyên USD để biến động phản ánh đúng Rate, không lẫn tỉ giá; quy đổi VND tham khảo ×27.000.</div>`:''}</div>
-      </div>`;};
+      </div>
+      ${insightCard(insC,cfg.sp)}`;};
      host.innerHTML=`
       <div class="small" style="margin-bottom:10px"><b>Công thức:</b> GV ĐV(t) = Σ Thành tiền ÷ Σ SL (chỉ dòng tiền &gt; 0 — tự loại nick dồn/giá 0) · BQ năm = Σ tiền ÷ Σ SL (gia quyền) · Δ MoM = GV(t) − GV(t−1) · %MoM = Δ ÷ GV(t−1) · So BQ = GV(t) ÷ BQ năm. Gift Card nhiều SKU — không tính gộp (biến động chỉ phản ánh mix).</div>
       ${section('robux',MR,'p4rb')}
@@ -949,11 +949,11 @@ const PAGES={
        ${kpi("SKU so được ≥2 NCC",fmt(multi.length),"có thể chọn NCC rẻ nhất")}
        ${kpi("Chênh giá mạnh nhất",top?(top.spread*100).toFixed(1)+"%":"—",top?top.sku.slice(0,40):"chưa có SKU nào ≥2 NCC")}
       </div>
-      ${insightCard(p5Ins)}
       <div class="card"><h3>Ma trận giá SKU × NCC — ${scopeLabel()}</h3>
        <div class="row" style="margin-bottom:8px"><input id="p5q" placeholder="Tìm SKU / danh mục…" style="flex:1;max-width:340px;padding:8px 12px;border:1px solid #c9d6ea;border-radius:8px;font-size:13px" oninput="window._p5q=this.value;renderP5Table()">
         <span class="small">Ô <span style="background:#dcfce7;color:#166534;padding:1px 7px;border-radius:4px;font-weight:bold">xanh</span> = NCC rẻ nhất của SKU (khi có ≥2 NCC) · Chênh % = (đắt nhất − rẻ nhất) ÷ rẻ nhất</span></div>
        <div class="scroll" style="max-height:520px" id="p5tb"></div></div>
+      ${insightCard(p5Ins)}
       <div class="note" style="margin-top:12px">Topup và các SPDV khác sẽ nối cùng khuôn ma trận này khi chốt nguồn từng loại.</div>`;
      renderP5Table();
    });
@@ -997,13 +997,13 @@ const PAGES={
        ${kpi("Tồn > 90 ngày",fmt(old90),pct(old90/(totVnd||1))+" giá trị kho — ưu tiên xả")}
        ${kpi("DPO — công nợ NCC","(đợt sau)","Days Payable Outstanding — chờ nguồn")}
       </div>
-      ${insightCard(p6Ins)}
       <div class="grid2" style="grid-template-columns:1fr 1.2fr">${cc("CO tồn (VND) theo danh mục — top 12","p6a")}${cc("Phân bổ tuổi tồn theo giá trị (VND) — xanh ≤30n · vàng 31–60 · cam 61–90 · đỏ >90","p6b")}</div>
       <div class="card"><h3>Tồn kho & tuổi tồn theo danh mục — ${rowsD.length} danh mục · ${fmt(totN)} code</h3><div class="scroll" style="max-height:460px"><table class="tbl"><thead><tr><th>Danh mục</th><th class="n">SL code</th><th class="n">CO tồn ($)</th><th class="n">CO tồn (VND)</th><th class="n">Tỷ trọng</th><th class="n">Tuổi BQ (ngày)</th><th class="n">Lâu nhất</th><th class="n">% giá trị >90n</th></tr></thead><tbody>
       ${rowsD.map(r=>`<tr><td>${r.cat}</td><td class="n">${fmt(r.n)}</td><td class="n">${f2(r.usd)}</td><td class="n">${fmt(r.vnd)}</td><td class="n">${pct(r.vnd/(totVnd||1))}</td><td class="n"><b>${f1(r.age)}</b></td><td class="n">${fmt(r.mx)}</td><td class="n"><span class="${r.bk[3]>0?'down':'flat'}">${pct(r.bk[3]/(r.vnd||1))}</span></td></tr>`).join('')}
       <tr style="font-weight:bold;background:#eef4ff"><td>TỔNG</td><td class="n">${fmt(totN)}</td><td class="n">${f2(totUsd)}</td><td class="n">${fmt(totVnd)}</td><td class="n">100%</td><td class="n">${f1(totAge)}</td><td class="n">—</td><td class="n">${pct(old90/(totVnd||1))}</td></tr>
       </tbody></table></div>
-      <div class="small" style="margin-top:6px">Tuổi tồn lấy từ cột "Ngày lưu kho" của file (bình quân gia quyền theo giá trị $). Tuổi tồn là ảnh chụp hiện tại của kho nên không đổi theo bộ lọc thời gian. Tồn các SPDV khác sẽ nối cùng khuôn khi có file/tab tương ứng.</div></div>`;
+      <div class="small" style="margin-top:6px">Tuổi tồn lấy từ cột "Ngày lưu kho" của file (bình quân gia quyền theo giá trị $). Tuổi tồn là ảnh chụp hiện tại của kho nên không đổi theo bộ lọc thời gian. Tồn các SPDV khác sẽ nối cùng khuôn khi có file/tab tương ứng.</div></div>
+      ${insightCard(p6Ins)}`;
      const top=rowsD.slice(0,12);
      mk("p6a",{type:'bar',data:{labels:top.map(r=>r.cat),datasets:[{data:top.map(r=>r.vnd),backgroundColor:'#1e5fd0'}]},options:hbarOpt()});
      const BK=['≤30 ngày','31–60','61–90','>90 ngày'],BC=['#34d399','#fbbf24','#fb923c','#f43f5e'];
@@ -1027,11 +1027,11 @@ const PAGES={
      ${kpi("Tổng thiệt hại",fmt(sc.totalDie),"die / lỗi / KBH")}
      ${kpi("SPDV lỗi cao nhất",worst?shortSP(worst[0]):'—',worst?pct(worst[3])+" thiệt hại/nhập":'')}
      ${kpi("Lỗi Robux",pct((sc.die["Robux"]||0)/((sc.nhap["Robux"])||1)),"die/nhập")}</div>
-    ${insightCard(p11Ins)}
     <div class="grid2">${cc("% lỗi theo SPDV","p11a")}${cc("% lỗi toàn phòng theo tháng","p11b")}</div>
     <div class="card"><h3>Bảng tỷ lệ lỗi nhập — ${scopeLabel()}</h3><div class="scroll"><table class="tbl"><thead><tr><th>SPDV</th><th class="n">CO Nhập</th><th class="n">Thiệt hại</th><th class="n">% lỗi</th></tr></thead><tbody>
      ${rows.map(r=>`<tr><td>${r[0]}</td><td class="n">${fmtn(r[1])}</td><td class="n">${fmtn(r[2])}</td><td class="n">${pct(r[3])}</td></tr>`).join('')}</tbody></table></div></div>
-    <div class="note" style="margin-top:12px">Chưa gồm (chờ thêm cột nguồn): response/uptime API NCC (Robux) · KBH/khiếu nại tách riêng (Gift Card) · vòng quay/hoàn theo NCC (Nick).</div>`;
+    <div class="note" style="margin-top:12px">Chưa gồm (chờ thêm cột nguồn): response/uptime API NCC (Robux) · KBH/khiếu nại tách riêng (Gift Card) · vòng quay/hoàn theo NCC (Nick).</div>
+    ${insightCard(p11Ins)}`;
    const pr=rows.filter(r=>r[1]>0);
    mk("p11a",{type:'bar',data:{labels:pr.map(r=>shortSP(r[0])),datasets:[{data:pr.map(r=>+(r[3]*100).toFixed(3)),backgroundColor:RED}]},
     options:{indexAxis:'y',plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.parsed.x+'%'}}},scales:{x:{...yG,ticks:{callback:v=>v+'%'}},y:noX}}});
